@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, weatherDataTable } from "@workspace/db";
 import { desc, eq, and, gte, lte, sql, count, avg } from "drizzle-orm";
 import { fetchWeather } from "../lib/weatherService.js";
-import { predict } from "../lib/aiService.js";
+import { predictWithHistory, type HistoricalRecord } from "../lib/aiService.js";
 import {
   GetWeatherQueryParams,
   GetWeatherResponse,
@@ -15,7 +15,8 @@ const router: IRouter = Router();
 
 /**
  * GET /weather
- * Fetches real-time weather, runs AI prediction, stores to DB, returns result.
+ * Fetches real-time weather, runs adaptive AI prediction (kNN + rules),
+ * stores to DB, returns result. The AI learns from accumulated readings.
  */
 router.get("/weather", async (req, res): Promise<void> => {
   const parsed = GetWeatherQueryParams.safeParse(req.query);
@@ -35,16 +36,52 @@ router.get("/weather", async (req, res): Promise<void> => {
     return;
   }
 
-  // Run AI prediction
-  const aiResult = predict({
-    temperature: weatherData.temperature,
-    windspeed: weatherData.windspeed,
-    humidity: weatherData.humidity,
-    pressure: weatherData.pressure,
-    weathercode: weatherData.weathercode,
-  });
+  // Fetch recent historical records to enable pattern learning.
+  // We use the last 100 readings globally (not location-filtered) so the AI
+  // can learn from any accumulated data, even from different locations.
+  let history: HistoricalRecord[] = [];
+  try {
+    const rows = await db
+      .select({
+        temperature: weatherDataTable.temperature,
+        windspeed: weatherDataTable.windspeed,
+        humidity: weatherDataTable.humidity,
+        pressure: weatherDataTable.pressure,
+        weathercode: weatherDataTable.weathercode,
+        prediction: weatherDataTable.prediction,
+        confidence: weatherDataTable.confidence,
+      })
+      .from(weatherDataTable)
+      .orderBy(desc(weatherDataTable.createdAt))
+      .limit(100);
 
-  // Store in database for historical analysis and future ML training
+    history = rows.map((r) => ({
+      temperature: r.temperature,
+      windspeed: r.windspeed,
+      humidity: r.humidity,
+      pressure: r.pressure,
+      weathercode: r.weathercode,
+      prediction: r.prediction,
+      confidence: r.confidence,
+    }));
+  } catch (err) {
+    // Non-fatal — fall back to pure rule-based if history fetch fails
+    req.log.warn({ err }, "Could not fetch history for pattern learning, using rules only");
+  }
+
+  // Run adaptive AI prediction (blends rules + kNN patterns from history)
+  const aiResult = predictWithHistory(
+    {
+      temperature: weatherData.temperature,
+      windspeed: weatherData.windspeed,
+      humidity: weatherData.humidity,
+      pressure: weatherData.pressure,
+      weathercode: weatherData.weathercode,
+    },
+    history
+  );
+
+  // Store in database
   let recordId: number;
   try {
     const [stored] = await db
@@ -82,13 +119,22 @@ router.get("/weather", async (req, res): Promise<void> => {
       prediction: aiResult.prediction,
       confidence: aiResult.confidence,
       reasoning: aiResult.reasoning,
+      dataPoints: aiResult.dataPoints,
+      modelVersion: aiResult.modelVersion,
     },
     location: { lat, lon },
     recordId,
   });
 
   req.log.info(
-    { lat, lon, prediction: aiResult.prediction, confidence: aiResult.confidence },
+    {
+      lat,
+      lon,
+      prediction: aiResult.prediction,
+      confidence: aiResult.confidence,
+      dataPoints: aiResult.dataPoints,
+      modelVersion: aiResult.modelVersion,
+    },
     "Weather prediction completed"
   );
 
@@ -98,7 +144,6 @@ router.get("/weather", async (req, res): Promise<void> => {
 /**
  * GET /weather/history
  * Returns past weather readings from the database.
- * Structured for future ML training data extraction.
  */
 router.get("/weather/history", async (req, res): Promise<void> => {
   const parsed = GetWeatherHistoryQueryParams.safeParse(req.query);
@@ -115,7 +160,6 @@ router.get("/weather/history", async (req, res): Promise<void> => {
     .orderBy(desc(weatherDataTable.createdAt))
     .limit(limit);
 
-  // Optional location filter (within ~0.5 degree radius)
   if (lat !== undefined && lon !== undefined) {
     query = db
       .select()
@@ -156,8 +200,7 @@ router.get("/weather/history", async (req, res): Promise<void> => {
 
 /**
  * GET /weather/stats
- * Returns aggregated statistics for the weather dashboard.
- * Useful for understanding local climate patterns over time.
+ * Returns aggregated statistics for the analytics dashboard.
  */
 router.get("/weather/stats", async (req, res): Promise<void> => {
   const [aggregates] = await db
@@ -170,7 +213,6 @@ router.get("/weather/stats", async (req, res): Promise<void> => {
     })
     .from(weatherDataTable);
 
-  // Build prediction breakdown
   const predictionRows = await db
     .select({
       prediction: weatherDataTable.prediction,

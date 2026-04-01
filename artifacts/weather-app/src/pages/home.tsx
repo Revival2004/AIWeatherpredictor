@@ -176,6 +176,15 @@ export function Home() {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-medium text-primary uppercase tracking-widest flex items-center gap-2">
                     <Activity className="w-4 h-4" /> AI Prediction
+                    {weatherData.prediction.modelVersion && weatherData.prediction.modelVersion !== "rules" && (
+                      <span className={`text-xs px-2 py-0.5 rounded font-bold tracking-wide ${
+                        weatherData.prediction.modelVersion === "pattern-learned"
+                          ? "bg-primary/20 text-primary"
+                          : "bg-secondary/20 text-secondary"
+                      }`}>
+                        {weatherData.prediction.modelVersion === "pattern-learned" ? "LEARNED" : "LEARNING"}
+                      </span>
+                    )}
                   </h3>
                   <div className="flex items-center gap-2 text-sm font-mono">
                     <span className="text-muted-foreground">CONFIDENCE:</span>
@@ -197,6 +206,11 @@ export function Home() {
                   <span className="text-foreground font-bold mr-2">REASONING:</span>
                   {weatherData.prediction.reasoning}
                 </p>
+                {(weatherData.prediction.dataPoints ?? 0) > 0 && (
+                  <p className="text-xs text-muted-foreground/60 font-mono mt-3">
+                    Informed by {weatherData.prediction.dataPoints} historical readings · model: {weatherData.prediction.modelVersion}
+                  </p>
+                )}
               </div>
             </div>
 

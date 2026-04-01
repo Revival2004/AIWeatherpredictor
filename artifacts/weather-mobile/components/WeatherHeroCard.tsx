@@ -166,6 +166,25 @@ export function WeatherHeroCard({
       minWidth: 36,
       textAlign: "right",
     },
+    learningBadge: {
+      backgroundColor: "rgba(255,255,255,0.25)",
+      borderRadius: 4,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+    },
+    learningBadgeText: {
+      color: colors.primaryForeground,
+      fontSize: 9,
+      fontFamily: "Inter_700Bold",
+      letterSpacing: 0.5,
+    },
+    dataPointsText: {
+      color: colors.primaryForeground,
+      fontSize: 11,
+      opacity: 0.65,
+      fontFamily: "Inter_400Regular",
+      marginTop: 4,
+    },
     statsRow: {
       flexDirection: "row",
       marginTop: 16,
@@ -322,7 +341,16 @@ export function WeatherHeroCard({
             style={{ marginTop: 2 }}
           />
           <View style={{ flex: 1 }}>
-            <Text style={styles.predictionLabel}>AI PREDICTION</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+              <Text style={styles.predictionLabel}>AI PREDICTION</Text>
+              {prediction?.modelVersion && prediction.modelVersion !== "rules" && (
+                <View style={styles.learningBadge}>
+                  <Text style={styles.learningBadgeText}>
+                    {prediction.modelVersion === "pattern-learned" ? "LEARNED" : "LEARNING"}
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.predictionText}>{prediction?.prediction ?? "—"}</Text>
             <View style={styles.confidenceRow}>
               <View style={styles.confidenceBar}>
@@ -330,6 +358,11 @@ export function WeatherHeroCard({
               </View>
               <Text style={styles.confidenceText}>{confPct}%</Text>
             </View>
+            {(prediction?.dataPoints ?? 0) > 0 && (
+              <Text style={styles.dataPointsText}>
+                Based on {prediction!.dataPoints} historical readings
+              </Text>
+            )}
           </View>
         </View>
 

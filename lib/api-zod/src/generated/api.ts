@@ -37,6 +37,16 @@ export const GetWeatherResponse = zod.object({
     prediction: zod.string().describe("Human-readable weather prediction"),
     confidence: zod.number().describe("Confidence score between 0 and 1"),
     reasoning: zod.string().describe("Explanation of the prediction logic"),
+    dataPoints: zod
+      .number()
+      .nullish()
+      .describe("Number of historical records used to inform this prediction"),
+    modelVersion: zod
+      .string()
+      .nullish()
+      .describe(
+        "AI model version: 'rules' = pure rule-based, 'rules+patterns' = blended, 'pattern-learned' = kNN dominant",
+      ),
   }),
   location: zod.object({
     lat: zod.number(),

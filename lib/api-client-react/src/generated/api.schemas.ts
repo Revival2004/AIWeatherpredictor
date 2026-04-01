@@ -35,6 +35,10 @@ export interface AIPrediction {
   confidence: number;
   /** Explanation of the prediction logic */
   reasoning: string;
+  /** Number of historical records used to inform this prediction */
+  dataPoints?: number | null;
+  /** AI model version: 'rules' = pure rule-based, 'rules+patterns' = blended, 'pattern-learned' = kNN dominant */
+  modelVersion?: string | null;
 }
 
 export type WeatherPredictionResponseLocation = {
