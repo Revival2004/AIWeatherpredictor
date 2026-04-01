@@ -276,7 +276,11 @@ export type MetricsResponseModel = {
   version: string;
   trainedAt: string;
   trainingSamples: number;
+  /** Ensemble accuracy */
   accuracy: number;
+  lrAccuracy?: number | null;
+  rfAccuracy?: number | null;
+  gbAccuracy?: number | null;
 } | null;
 
 export interface MetricsResponse {
@@ -288,8 +292,14 @@ export interface MetricsResponse {
 
 export interface TrainResponse {
   trainingSamples: number;
-  /** Training accuracy percentage */
+  /** Ensemble training accuracy percentage */
   accuracy: number;
+  /** Logistic Regression training accuracy */
+  lrAccuracy: number;
+  /** Random Forest training accuracy */
+  rfAccuracy: number;
+  /** Gradient Boosting training accuracy */
+  gbAccuracy: number;
   message: string;
 }
 
@@ -303,6 +313,15 @@ export const RainPredictionResponsePredictionValue = {
   yes: "yes",
   no: "no",
 } as const;
+
+/**
+ * Individual model probabilities before ensemble voting
+ */
+export type RainPredictionResponseModelProbabilities = {
+  lr: number;
+  rf: number;
+  gb: number;
+} | null;
 
 export type RainPredictionResponseCurrentConditions = {
   temperature: number;
@@ -324,6 +343,8 @@ export interface RainPredictionResponse {
   lon: number;
   /** The time this prediction is for (now + 2h) */
   targetTime: string;
+  /** Individual model probabilities before ensemble voting */
+  modelProbabilities?: RainPredictionResponseModelProbabilities;
   currentConditions: RainPredictionResponseCurrentConditions;
 }
 

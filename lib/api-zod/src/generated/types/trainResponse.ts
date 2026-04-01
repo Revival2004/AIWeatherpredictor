@@ -8,7 +8,13 @@
 
 export interface TrainResponse {
   trainingSamples: number;
-  /** Training accuracy percentage */
+  /** Ensemble training accuracy percentage */
   accuracy: number;
+  /** Logistic Regression training accuracy */
+  lrAccuracy: number;
+  /** Random Forest training accuracy */
+  rfAccuracy: number;
+  /** Gradient Boosting training accuracy */
+  gbAccuracy: number;
   message: string;
 }

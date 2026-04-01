@@ -10,5 +10,9 @@ export type MetricsResponseModel = {
   version: string;
   trainedAt: Date;
   trainingSamples: number;
+  /** Ensemble accuracy */
   accuracy: number;
+  lrAccuracy?: number | null;
+  rfAccuracy?: number | null;
+  gbAccuracy?: number | null;
 } | null;

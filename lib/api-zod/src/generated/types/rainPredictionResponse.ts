@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RainPredictionResponseCurrentConditions } from "./rainPredictionResponseCurrentConditions";
+import type { RainPredictionResponseModelProbabilities } from "./rainPredictionResponseModelProbabilities";
 import type { RainPredictionResponsePredictionValue } from "./rainPredictionResponsePredictionValue";
 
 export interface RainPredictionResponse {
@@ -20,5 +21,7 @@ export interface RainPredictionResponse {
   lon: number;
   /** The time this prediction is for (now + 2h) */
   targetTime: Date;
+  /** Individual model probabilities before ensemble voting */
+  modelProbabilities?: RainPredictionResponseModelProbabilities;
   currentConditions: RainPredictionResponseCurrentConditions;
 }

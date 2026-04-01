@@ -235,6 +235,14 @@ export const GetRainPredictionResponse = zod.object({
   targetTime: zod.coerce
     .date()
     .describe("The time this prediction is for (now + 2h)"),
+  modelProbabilities: zod
+    .object({
+      lr: zod.number(),
+      rf: zod.number(),
+      gb: zod.number(),
+    })
+    .nullish()
+    .describe("Individual model probabilities before ensemble voting"),
   currentConditions: zod.object({
     temperature: zod.number(),
     humidity: zod.number(),
@@ -379,7 +387,10 @@ export const GetMetricsResponse = zod.object({
       version: zod.string(),
       trainedAt: zod.coerce.date(),
       trainingSamples: zod.number(),
-      accuracy: zod.number(),
+      accuracy: zod.number().describe("Ensemble accuracy"),
+      lrAccuracy: zod.number().nullish(),
+      rfAccuracy: zod.number().nullish(),
+      gbAccuracy: zod.number().nullish(),
     })
     .nullable(),
   observations: zod
@@ -393,6 +404,9 @@ export const GetMetricsResponse = zod.object({
  */
 export const TrainModelResponse = zod.object({
   trainingSamples: zod.number(),
-  accuracy: zod.number().describe("Training accuracy percentage"),
+  accuracy: zod.number().describe("Ensemble training accuracy percentage"),
+  lrAccuracy: zod.number().describe("Logistic Regression training accuracy"),
+  rfAccuracy: zod.number().describe("Random Forest training accuracy"),
+  gbAccuracy: zod.number().describe("Gradient Boosting training accuracy"),
   message: zod.string(),
 });

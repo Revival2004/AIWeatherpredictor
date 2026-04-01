@@ -339,6 +339,9 @@ router.get("/metrics", async (req, res): Promise<void> => {
             trainedAt: model.trainedAt,
             trainingSamples: model.trainingSamples,
             accuracy: model.accuracy,
+            lrAccuracy: model.lrAccuracy ?? null,
+            rfAccuracy: model.rfAccuracy ?? null,
+            gbAccuracy: model.gbAccuracy ?? null,
           }
         : null,
       observations: Number(obsCount.count),

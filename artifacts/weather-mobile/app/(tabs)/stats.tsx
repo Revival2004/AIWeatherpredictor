@@ -393,21 +393,46 @@ export default function StatsScreen() {
           {model ? (
             <>
               <View style={styles.row}>
-                <Text style={styles.label}>Model</Text>
-                <Text style={styles.mutedValue}>{model.version}</Text>
-              </View>
-              <View style={styles.row}>
                 <Text style={styles.label}>Training samples</Text>
                 <Text style={styles.value}>{model.trainingSamples}</Text>
               </View>
-              <View style={styles.rowLast}>
-                <Text style={styles.label}>Training accuracy</Text>
-                <Text style={styles.value}>{model.accuracy}%</Text>
+              {/* Per-model accuracy bars */}
+              <View style={{ paddingTop: 12 }}>
+                <Text style={[styles.mutedValue, { marginBottom: 10, fontSize: 11, letterSpacing: 0.8 }]}>
+                  MODEL COMPARISON
+                </Text>
+                {[
+                  { name: "Logistic Regression", key: "lr", pct: model.lrAccuracy, color: "#4A90D9" },
+                  { name: "Random Forest", key: "rf", pct: model.rfAccuracy, color: "#3D8B37" },
+                  { name: "Gradient Boosting", key: "gb", pct: model.gbAccuracy, color: "#D4851A" },
+                  { name: "🏆 Ensemble Vote", key: "ens", pct: model.accuracy, color: "#8B2FC9" },
+                ].map((m, idx, arr) => (
+                  <View key={m.key} style={{ marginBottom: idx === arr.length - 1 ? 0 : 10 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                      <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: colors.foreground }}>
+                        {m.name}
+                      </Text>
+                      <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: m.color }}>
+                        {m.pct != null ? `${m.pct}%` : "–"}
+                      </Text>
+                    </View>
+                    <View style={{ height: 6, backgroundColor: colors.muted, borderRadius: 3, overflow: "hidden" }}>
+                      <View
+                        style={{
+                          height: 6,
+                          borderRadius: 3,
+                          backgroundColor: m.color,
+                          width: `${Math.min(100, m.pct ?? 0)}%`,
+                        }}
+                      />
+                    </View>
+                  </View>
+                ))}
               </View>
             </>
           ) : (
             <View style={{ paddingTop: 12 }}>
-              <Text style={styles.emptyText}>No model trained yet. Tap "Train Model" below.</Text>
+              <Text style={styles.emptyText}>No ensemble trained yet. Tap "Train Model" below.</Text>
             </View>
           )}
         </View>

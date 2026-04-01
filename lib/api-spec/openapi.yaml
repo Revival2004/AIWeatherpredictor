@@ -880,6 +880,16 @@ components:
               type: integer
             accuracy:
               type: number
+              description: Ensemble accuracy
+            lrAccuracy:
+              type: number
+              nullable: true
+            rfAccuracy:
+              type: number
+              nullable: true
+            gbAccuracy:
+              type: number
+              nullable: true
           required:
             - version
             - trainedAt
@@ -900,12 +910,24 @@ components:
           type: integer
         accuracy:
           type: number
-          description: Training accuracy percentage
+          description: Ensemble training accuracy percentage
+        lrAccuracy:
+          type: number
+          description: Logistic Regression training accuracy
+        rfAccuracy:
+          type: number
+          description: Random Forest training accuracy
+        gbAccuracy:
+          type: number
+          description: Gradient Boosting training accuracy
         message:
           type: string
       required:
         - trainingSamples
         - accuracy
+        - lrAccuracy
+        - rfAccuracy
+        - gbAccuracy
         - message
 
     RainPredictionResponse:
@@ -931,6 +953,21 @@ components:
           type: string
           format: date-time
           description: The time this prediction is for (now + 2h)
+        modelProbabilities:
+          type: object
+          nullable: true
+          description: Individual model probabilities before ensemble voting
+          properties:
+            lr:
+              type: number
+            rf:
+              type: number
+            gb:
+              type: number
+          required:
+            - lr
+            - rf
+            - gb
         currentConditions:
           type: object
           properties:

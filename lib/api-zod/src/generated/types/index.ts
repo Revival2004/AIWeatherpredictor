@@ -33,6 +33,7 @@ export * from "./metricsResponseModel";
 export * from "./metricsResponsePredictions";
 export * from "./rainPredictionResponse";
 export * from "./rainPredictionResponseCurrentConditions";
+export * from "./rainPredictionResponseModelProbabilities";
 export * from "./rainPredictionResponsePredictionValue";
 export * from "./trackedLocation";
 export * from "./trainResponse";

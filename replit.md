@@ -65,12 +65,15 @@ A full-stack AI-powered microclimate weather prediction system.
 - Rule-based: humidity+pressure thresholds, precipitation codes, wind speed
 - Model version progresses: "rules" → "rules+patterns" → "pattern-learned"
 
-**Logistic Regression ML** (`mlService.ts`):
+**Multi-Model Ensemble** (`mlService.ts`) — three independent models, soft-voted:
+1. **Logistic Regression** — linear boundary via gradient descent (600 epochs)
+2. **Random Forest** — 30 bagged decision trees, sqrt(features) random subset per split, max depth 5
+3. **Gradient Boosting** — 60 sequential regression trees on pseudo-residuals, lr=0.08, max depth 4
+- Prediction: average probability from all three (soft voting)
 - Features: temperature, humidity, pressure, windspeed, is_raining_now, hour_sin/cos, month_sin/cos
 - Binary target: will it rain in the next 2 hours?
-- Training: gradient descent on labeled historical pairs
+- Model and per-algorithm accuracy saved to `ml_model.json`
 - Falls back to heuristic rules if no model is trained yet
-- Model saved to `ml_model.json` in the api-server directory
 
 ### Database Schema
 Tables:
