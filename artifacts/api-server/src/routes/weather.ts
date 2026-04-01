@@ -1,10 +1,13 @@
 import { Router, type IRouter } from "express";
-import { db, weatherDataTable } from "@workspace/db";
+import { db, weatherDataTable, weatherPredictionsTable } from "@workspace/db";
 import { desc, eq, and, gte, lte, sql, count, avg } from "drizzle-orm";
 import { fetchWeather } from "../lib/weatherService.js";
 import { predictWithHistory, type HistoricalRecord } from "../lib/aiService.js";
 import { fetchForecast } from "../lib/forecastService.js";
 import { generateAlerts } from "../lib/alertsService.js";
+import { collectAllLocations } from "../lib/schedulerService.js";
+import { getPredictionAccuracy } from "../lib/feedbackService.js";
+import { trainModel, predictRain, loadModel } from "../lib/mlService.js";
 import {
   GetWeatherQueryParams,
   GetWeatherResponse,
@@ -283,6 +286,145 @@ router.get("/weather/stats", async (req, res): Promise<void> => {
   });
 
   res.json(response);
+});
+
+/**
+ * POST /collect
+ * Manually trigger weather collection for all active tracked locations.
+ * The hourly scheduler runs this automatically; this endpoint is for on-demand use.
+ */
+router.post("/collect", async (req, res): Promise<void> => {
+  try {
+    const results = await collectAllLocations(req.log);
+    const successful = results.filter((r) => r.success).length;
+    res.json({
+      collected: successful,
+      total: results.length,
+      results,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Manual collection failed");
+    res.status(500).json({ error: "Failed to collect weather data." });
+  }
+});
+
+/**
+ * GET /metrics
+ * Returns prediction accuracy metrics and model status.
+ */
+router.get("/metrics", async (req, res): Promise<void> => {
+  try {
+    const accuracy = await getPredictionAccuracy();
+    const model = loadModel();
+
+    // Count total tracked predictions
+    const [predCount] = await db
+      .select({ count: count(weatherPredictionsTable.id) })
+      .from(weatherPredictionsTable);
+
+    const [obsCount] = await db
+      .select({ count: count(weatherDataTable.id) })
+      .from(weatherDataTable);
+
+    res.json({
+      predictions: {
+        total: Number(predCount.count),
+        resolved: accuracy.total,
+        correct: accuracy.correct,
+        accuracy: accuracy.accuracy,
+      },
+      model: model
+        ? {
+            version: model.version,
+            trainedAt: model.trainedAt,
+            trainingSamples: model.trainingSamples,
+            accuracy: model.accuracy,
+          }
+        : null,
+      observations: Number(obsCount.count),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch metrics");
+    res.status(500).json({ error: "Failed to fetch metrics." });
+  }
+});
+
+/**
+ * POST /train
+ * Retrain the ML model on all historical data.
+ * Returns training summary including samples used and accuracy.
+ */
+router.post("/train", async (req, res): Promise<void> => {
+  try {
+    const result = await trainModel(req.log);
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Model training failed");
+    res.status(500).json({ error: "Model training failed." });
+  }
+});
+
+/**
+ * GET /weather/rain
+ * Returns a rain prediction (yes/no + confidence) for a given lat/lon
+ * using the current weather conditions and the trained ML model.
+ */
+router.get("/weather/rain", async (req, res): Promise<void> => {
+  const parsed = GetWeatherQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { lat, lon } = parsed.data;
+
+  let weatherData;
+  try {
+    weatherData = await fetchWeather(lat, lon);
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch weather for rain prediction");
+    res.status(500).json({ error: "Failed to fetch current weather." });
+    return;
+  }
+
+  const prediction = predictRain(
+    weatherData.temperature,
+    weatherData.humidity,
+    weatherData.pressure,
+    weatherData.windspeed,
+    weatherData.weathercode
+  );
+
+  // Optionally store this prediction for the feedback loop
+  const targetTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  try {
+    await db.insert(weatherPredictionsTable).values({
+      latitude: lat,
+      longitude: lon,
+      predictedAt: new Date(),
+      targetTime,
+      predictionType: "rain_2h",
+      predictionValue: prediction.predictionValue,
+      confidence: prediction.confidence,
+      modelVersion: prediction.modelVersion,
+    });
+  } catch {
+    // Non-fatal: still return the prediction
+  }
+
+  res.json({
+    ...prediction,
+    lat,
+    lon,
+    targetTime: targetTime.toISOString(),
+    currentConditions: {
+      temperature: weatherData.temperature,
+      humidity: weatherData.humidity,
+      pressure: weatherData.pressure,
+      windspeed: weatherData.windspeed,
+      weathercode: weatherData.weathercode,
+    },
+  });
 });
 
 export default router;

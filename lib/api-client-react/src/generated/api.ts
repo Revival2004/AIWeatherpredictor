@@ -5,30 +5,44 @@
  * Microclimate AI Weather Predictor API
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
 import type {
+  ActivateLocation200,
+  AddLocation201,
+  AddLocationRequest,
   AlertsResponse,
+  CollectionResponse,
+  DeactivateLocation200,
+  DeleteLocation200,
   ErrorResponse,
   ForecastResponse,
+  GetRainPredictionParams,
   GetWeatherAlertsParams,
   GetWeatherForecastParams,
   GetWeatherHistoryParams,
   GetWeatherParams,
   HealthStatus,
+  LocationsResponse,
+  MetricsResponse,
+  RainPredictionResponse,
+  TrainResponse,
   WeatherPredictionResponse,
   WeatherRecord,
   WeatherStats,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -576,3 +590,756 @@ export function useGetWeatherStats<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Returns a binary rain prediction (yes/no + confidence) using the trained logistic regression model
+ * @summary Get ML rain prediction
+ */
+export const getGetRainPredictionUrl = (params: GetRainPredictionParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/weather/rain?${stringifiedParams}`
+    : `/api/weather/rain`;
+};
+
+export const getRainPrediction = async (
+  params: GetRainPredictionParams,
+  options?: RequestInit,
+): Promise<RainPredictionResponse> => {
+  return customFetch<RainPredictionResponse>(getGetRainPredictionUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRainPredictionQueryKey = (
+  params?: GetRainPredictionParams,
+) => {
+  return [`/api/weather/rain`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetRainPredictionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRainPrediction>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetRainPredictionParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRainPrediction>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetRainPredictionQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getRainPrediction>>
+  > = ({ signal }) => getRainPrediction(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRainPrediction>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRainPredictionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRainPrediction>>
+>;
+export type GetRainPredictionQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get ML rain prediction
+ */
+
+export function useGetRainPrediction<
+  TData = Awaited<ReturnType<typeof getRainPrediction>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetRainPredictionParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRainPrediction>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRainPredictionQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns all registered tracked locations (active and inactive)
+ * @summary List tracked locations
+ */
+export const getGetLocationsUrl = () => {
+  return `/api/locations`;
+};
+
+export const getLocations = async (
+  options?: RequestInit,
+): Promise<LocationsResponse> => {
+  return customFetch<LocationsResponse>(getGetLocationsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLocationsQueryKey = () => {
+  return [`/api/locations`] as const;
+};
+
+export const getGetLocationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLocations>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLocations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLocationsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLocations>>> = ({
+    signal,
+  }) => getLocations({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLocations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLocationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLocations>>
+>;
+export type GetLocationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List tracked locations
+ */
+
+export function useGetLocations<
+  TData = Awaited<ReturnType<typeof getLocations>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLocations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLocationsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Register a new location for automatic hourly weather collection
+ * @summary Add a tracked location
+ */
+export const getAddLocationUrl = () => {
+  return `/api/locations`;
+};
+
+export const addLocation = async (
+  addLocationRequest: AddLocationRequest,
+  options?: RequestInit,
+): Promise<AddLocation201> => {
+  return customFetch<AddLocation201>(getAddLocationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addLocationRequest),
+  });
+};
+
+export const getAddLocationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addLocation>>,
+    TError,
+    { data: BodyType<AddLocationRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addLocation>>,
+  TError,
+  { data: BodyType<AddLocationRequest> },
+  TContext
+> => {
+  const mutationKey = ["addLocation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addLocation>>,
+    { data: BodyType<AddLocationRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return addLocation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddLocationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addLocation>>
+>;
+export type AddLocationMutationBody = BodyType<AddLocationRequest>;
+export type AddLocationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Add a tracked location
+ */
+export const useAddLocation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addLocation>>,
+    TError,
+    { data: BodyType<AddLocationRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addLocation>>,
+  TError,
+  { data: BodyType<AddLocationRequest> },
+  TContext
+> => {
+  return useMutation(getAddLocationMutationOptions(options));
+};
+
+/**
+ * @summary Activate a location
+ */
+export const getActivateLocationUrl = (id: number) => {
+  return `/api/locations/${id}/activate`;
+};
+
+export const activateLocation = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ActivateLocation200> => {
+  return customFetch<ActivateLocation200>(getActivateLocationUrl(id), {
+    ...options,
+    method: "PUT",
+  });
+};
+
+export const getActivateLocationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateLocation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof activateLocation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["activateLocation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof activateLocation>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return activateLocation(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ActivateLocationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof activateLocation>>
+>;
+
+export type ActivateLocationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Activate a location
+ */
+export const useActivateLocation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateLocation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof activateLocation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getActivateLocationMutationOptions(options));
+};
+
+/**
+ * @summary Deactivate a location
+ */
+export const getDeactivateLocationUrl = (id: number) => {
+  return `/api/locations/${id}/deactivate`;
+};
+
+export const deactivateLocation = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeactivateLocation200> => {
+  return customFetch<DeactivateLocation200>(getDeactivateLocationUrl(id), {
+    ...options,
+    method: "PUT",
+  });
+};
+
+export const getDeactivateLocationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deactivateLocation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deactivateLocation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deactivateLocation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deactivateLocation>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deactivateLocation(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeactivateLocationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deactivateLocation>>
+>;
+
+export type DeactivateLocationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Deactivate a location
+ */
+export const useDeactivateLocation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deactivateLocation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deactivateLocation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeactivateLocationMutationOptions(options));
+};
+
+/**
+ * @summary Delete a tracked location
+ */
+export const getDeleteLocationUrl = (id: number) => {
+  return `/api/locations/${id}`;
+};
+
+export const deleteLocation = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteLocation200> => {
+  return customFetch<DeleteLocation200>(getDeleteLocationUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteLocationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLocation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteLocation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteLocation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteLocation>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteLocation(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteLocationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteLocation>>
+>;
+
+export type DeleteLocationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a tracked location
+ */
+export const useDeleteLocation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLocation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteLocation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteLocationMutationOptions(options));
+};
+
+/**
+ * Immediately collect weather for all active tracked locations (the scheduler runs this hourly)
+ * @summary Trigger manual weather collection
+ */
+export const getTriggerCollectionUrl = () => {
+  return `/api/collect`;
+};
+
+export const triggerCollection = async (
+  options?: RequestInit,
+): Promise<CollectionResponse> => {
+  return customFetch<CollectionResponse>(getTriggerCollectionUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getTriggerCollectionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerCollection>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof triggerCollection>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["triggerCollection"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof triggerCollection>>,
+    void
+  > = () => {
+    return triggerCollection(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TriggerCollectionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof triggerCollection>>
+>;
+
+export type TriggerCollectionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Trigger manual weather collection
+ */
+export const useTriggerCollection = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerCollection>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof triggerCollection>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getTriggerCollectionMutationOptions(options));
+};
+
+/**
+ * Returns ML model accuracy, total predictions, and observation counts
+ * @summary Get prediction accuracy metrics
+ */
+export const getGetMetricsUrl = () => {
+  return `/api/metrics`;
+};
+
+export const getMetrics = async (
+  options?: RequestInit,
+): Promise<MetricsResponse> => {
+  return customFetch<MetricsResponse>(getGetMetricsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMetricsQueryKey = () => {
+  return [`/api/metrics`] as const;
+};
+
+export const getGetMetricsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMetrics>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMetrics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMetricsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMetrics>>> = ({
+    signal,
+  }) => getMetrics({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMetrics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMetricsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMetrics>>
+>;
+export type GetMetricsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get prediction accuracy metrics
+ */
+
+export function useGetMetrics<
+  TData = Awaited<ReturnType<typeof getMetrics>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMetrics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMetricsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Trains the logistic regression model on all historical weather observations. Returns training accuracy and number of samples used.
+ * @summary Retrain the ML model
+ */
+export const getTrainModelUrl = () => {
+  return `/api/train`;
+};
+
+export const trainModel = async (
+  options?: RequestInit,
+): Promise<TrainResponse> => {
+  return customFetch<TrainResponse>(getTrainModelUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getTrainModelMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof trainModel>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof trainModel>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["trainModel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof trainModel>>,
+    void
+  > = () => {
+    return trainModel(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TrainModelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof trainModel>>
+>;
+
+export type TrainModelMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Retrain the ML model
+ */
+export const useTrainModel = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof trainModel>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof trainModel>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getTrainModelMutationOptions(options));
+};

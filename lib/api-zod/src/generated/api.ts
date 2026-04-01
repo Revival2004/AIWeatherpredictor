@@ -213,3 +213,186 @@ export const GetWeatherStatsResponse = zod.object({
     .nullable()
     .describe("Timestamp of the most recent reading"),
 });
+
+/**
+ * Returns a binary rain prediction (yes/no + confidence) using the trained logistic regression model
+ * @summary Get ML rain prediction
+ */
+export const GetRainPredictionQueryParams = zod.object({
+  lat: zod.coerce.number().describe("Latitude"),
+  lon: zod.coerce.number().describe("Longitude"),
+});
+
+export const GetRainPredictionResponse = zod.object({
+  predictionValue: zod
+    .enum(["yes", "no"])
+    .describe("Whether rain is predicted within the next 2 hours"),
+  confidence: zod.number().describe("Confidence score 0-1"),
+  probability: zod.number().describe("Raw probability 0-1"),
+  modelVersion: zod.string(),
+  lat: zod.number(),
+  lon: zod.number(),
+  targetTime: zod.coerce
+    .date()
+    .describe("The time this prediction is for (now + 2h)"),
+  currentConditions: zod.object({
+    temperature: zod.number(),
+    humidity: zod.number(),
+    pressure: zod.number(),
+    windspeed: zod.number(),
+    weathercode: zod.number(),
+  }),
+});
+
+/**
+ * Returns all registered tracked locations (active and inactive)
+ * @summary List tracked locations
+ */
+export const GetLocationsResponse = zod.object({
+  locations: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      latitude: zod.number(),
+      longitude: zod.number(),
+      active: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * Register a new location for automatic hourly weather collection
+ * @summary Add a tracked location
+ */
+export const addLocationBodyNameMax = 100;
+
+export const addLocationBodyLatitudeMin = -90;
+export const addLocationBodyLatitudeMax = 90;
+
+export const addLocationBodyLongitudeMin = -180;
+export const addLocationBodyLongitudeMax = 180;
+
+export const AddLocationBody = zod.object({
+  name: zod.string().min(1).max(addLocationBodyNameMax),
+  latitude: zod
+    .number()
+    .min(addLocationBodyLatitudeMin)
+    .max(addLocationBodyLatitudeMax),
+  longitude: zod
+    .number()
+    .min(addLocationBodyLongitudeMin)
+    .max(addLocationBodyLongitudeMax),
+});
+
+/**
+ * @summary Activate a location
+ */
+export const ActivateLocationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ActivateLocationResponse = zod.object({
+  location: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    latitude: zod.number(),
+    longitude: zod.number(),
+    active: zod.boolean(),
+    createdAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Deactivate a location
+ */
+export const DeactivateLocationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeactivateLocationResponse = zod.object({
+  location: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    latitude: zod.number(),
+    longitude: zod.number(),
+    active: zod.boolean(),
+    createdAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * @summary Delete a tracked location
+ */
+export const DeleteLocationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteLocationResponse = zod.object({
+  deleted: zod.boolean(),
+  location: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    latitude: zod.number(),
+    longitude: zod.number(),
+    active: zod.boolean(),
+    createdAt: zod.coerce.date(),
+  }),
+});
+
+/**
+ * Immediately collect weather for all active tracked locations (the scheduler runs this hourly)
+ * @summary Trigger manual weather collection
+ */
+export const TriggerCollectionResponse = zod.object({
+  collected: zod
+    .number()
+    .describe("Number of locations successfully collected"),
+  total: zod.number().describe("Total locations attempted"),
+  results: zod.array(
+    zod.object({
+      location: zod.string(),
+      lat: zod.number(),
+      lon: zod.number(),
+      success: zod.boolean(),
+      error: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * Returns ML model accuracy, total predictions, and observation counts
+ * @summary Get prediction accuracy metrics
+ */
+export const GetMetricsResponse = zod.object({
+  predictions: zod.object({
+    total: zod.number().describe("Total formal predictions stored"),
+    resolved: zod.number().describe("Predictions with feedback resolved"),
+    correct: zod.number(),
+    accuracy: zod
+      .number()
+      .nullable()
+      .describe("Percentage accuracy 0-100, null if no resolved predictions"),
+  }),
+  model: zod
+    .object({
+      version: zod.string(),
+      trainedAt: zod.coerce.date(),
+      trainingSamples: zod.number(),
+      accuracy: zod.number(),
+    })
+    .nullable(),
+  observations: zod
+    .number()
+    .describe("Total weather observations in the database"),
+});
+
+/**
+ * Trains the logistic regression model on all historical weather observations. Returns training accuracy and number of samples used.
+ * @summary Retrain the ML model
+ */
+export const TrainModelResponse = zod.object({
+  trainingSamples: zod.number(),
+  accuracy: zod.number().describe("Training accuracy percentage"),
+  message: zod.string(),
+});

@@ -1,33 +1,143 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useGetWeatherStats } from "@workspace/api-client-react";
+import {
+  useGetWeatherStats,
+  useGetMetrics,
+  useGetLocations,
+  useAddLocation,
+  useDeleteLocation,
+  useActivateLocation,
+  useDeactivateLocation,
+  useTriggerCollection,
+  useTrainModel,
+  getGetLocationsQueryKey,
+  getGetMetricsQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { StatsPanel } from "@/components/StatsPanel";
 import { useColors } from "@/hooks/useColors";
 
 export default function StatsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch, isRefetching } = useGetWeatherStats({
-    query: { staleTime: 2 * 60 * 1000 },
+  const [showAddLocation, setShowAddLocation] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newLat, setNewLat] = useState("");
+  const [newLon, setNewLon] = useState("");
+
+  const { data: statsData, isLoading: statsLoading, refetch: refetchStats, isRefetching: statsRefetching } =
+    useGetWeatherStats({ query: { staleTime: 2 * 60 * 1000 } });
+
+  const { data: metricsData, isLoading: metricsLoading, refetch: refetchMetrics } =
+    useGetMetrics({ query: { staleTime: 60 * 1000 } });
+
+  const { data: locationsData, isLoading: locationsLoading, refetch: refetchLocations } =
+    useGetLocations({ query: { staleTime: 30 * 1000 } });
+
+  const addLocationMutation = useAddLocation({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+        setShowAddLocation(false);
+        setNewName("");
+        setNewLat("");
+        setNewLon("");
+      },
+    },
   });
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
+  const deleteLocationMutation = useDeleteLocation({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() }),
     },
+  });
+
+  const activateMutation = useActivateLocation({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() }),
+    },
+  });
+
+  const deactivateMutation = useDeactivateLocation({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() }),
+    },
+  });
+
+  const collectMutation = useTriggerCollection({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getGetMetricsQueryKey() });
+        Alert.alert("Collection complete", `Collected ${data.collected} of ${data.total} locations.`);
+      },
+      onError: () => Alert.alert("Error", "Collection failed. Check your locations."),
+    },
+  });
+
+  const trainMutation = useTrainModel({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getGetMetricsQueryKey() });
+        Alert.alert("Training complete", data.message ?? `Trained on ${data.trainingSamples} samples.`);
+      },
+      onError: () => Alert.alert("Error", "Training failed. Need more weather data first."),
+    },
+  });
+
+  function handleAddLocation() {
+    const lat = parseFloat(newLat);
+    const lon = parseFloat(newLon);
+    if (!newName.trim() || isNaN(lat) || isNaN(lon)) {
+      Alert.alert("Invalid input", "Please enter a name, latitude (−90 to 90), and longitude (−180 to 180).");
+      return;
+    }
+    addLocationMutation.mutate({ data: { name: newName.trim(), latitude: lat, longitude: lon } });
+  }
+
+  function confirmDelete(id: number, name: string) {
+    Alert.alert("Remove Location", `Remove "${name}" from tracked locations?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => deleteLocationMutation.mutate({ id }),
+      },
+    ]);
+  }
+
+  function refetchAll() {
+    refetchStats();
+    refetchMetrics();
+    refetchLocations();
+  }
+
+  const isRefetching = statsRefetching || metricsLoading;
+
+  const predBreakdown = statsData?.predictionBreakdown ?? {};
+  const predEntries = Object.entries(predBreakdown).sort((a, b) => b[1] - a[1]);
+  const accuracy = metricsData?.predictions?.accuracy;
+  const model = metricsData?.model;
+  const locations = locationsData?.locations ?? [];
+
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
     header: {
       paddingTop: Platform.OS === "web" ? 67 : insets.top + 16,
       paddingBottom: 12,
@@ -38,11 +148,7 @@ export default function StatsScreen() {
       borderBottomWidth: 1,
       borderColor: colors.border,
     },
-    title: {
-      fontSize: 22,
-      fontFamily: "Inter_700Bold",
-      color: colors.foreground,
-    },
+    title: { fontSize: 22, fontFamily: "Inter_700Bold", color: colors.foreground },
     refreshBtn: {
       width: 36,
       height: 36,
@@ -56,23 +162,22 @@ export default function StatsScreen() {
       paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 100,
     },
     sectionLabel: {
-      fontSize: 12,
+      fontSize: 11,
       fontFamily: "Inter_600SemiBold",
       color: colors.mutedForeground,
-      letterSpacing: 0.8,
+      letterSpacing: 1,
       marginHorizontal: 20,
-      marginBottom: 12,
+      marginBottom: 10,
     },
-    predCard: {
+    card: {
       marginHorizontal: 16,
       backgroundColor: colors.card,
       borderRadius: 16,
       padding: 16,
       borderWidth: 1,
       borderColor: colors.border,
-      marginTop: 4,
     },
-    predItem: {
+    row: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
@@ -80,23 +185,15 @@ export default function StatsScreen() {
       borderBottomWidth: 1,
       borderColor: colors.border,
     },
-    predItemLast: {
+    rowLast: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       paddingTop: 8,
     },
-    predLabel: {
-      fontSize: 13,
-      fontFamily: "Inter_500Medium",
-      color: colors.foreground,
-      flex: 1,
-    },
-    predCount: {
-      fontSize: 14,
-      fontFamily: "Inter_700Bold",
-      color: colors.primary,
-    },
+    label: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.foreground, flex: 1 },
+    value: { fontSize: 14, fontFamily: "Inter_700Bold", color: colors.primary },
+    mutedValue: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.mutedForeground },
     lastReadingRow: {
       marginHorizontal: 16,
       marginBottom: 16,
@@ -104,25 +201,120 @@ export default function StatsScreen() {
       alignItems: "center",
       gap: 6,
     },
-    lastReadingText: {
-      fontSize: 12,
+    lastReadingText: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
+
+    // Accuracy ring
+    accuracyRow: { flexDirection: "row", alignItems: "center", gap: 16, paddingBottom: 8, borderBottomWidth: 1, borderColor: colors.border },
+    ringContainer: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      borderWidth: 5,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    ringPct: { fontSize: 15, fontFamily: "Inter_700Bold" },
+    accuracyMeta: { flex: 1, gap: 4 },
+    accuracyTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground },
+    accuracySub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
+
+    // Buttons
+    actionRow: { flexDirection: "row", gap: 10, marginHorizontal: 16, marginBottom: 4 },
+    actionBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingVertical: 12,
+      borderRadius: 12,
+      backgroundColor: colors.primary,
+    },
+    actionBtnSecondary: { backgroundColor: colors.muted },
+    actionBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
+    actionBtnTextSecondary: { color: colors.foreground },
+
+    // Locations
+    locationItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+    },
+    locationItemLast: { flexDirection: "row", alignItems: "center", paddingTop: 10 },
+    locationName: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, flex: 1 },
+    locationCoords: { fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, flex: 1 },
+    locationBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+      marginRight: 8,
+    },
+    locationBadgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+    locationActions: { flexDirection: "row", gap: 8, alignItems: "center" },
+
+    // Add location form
+    addForm: {
+      marginHorizontal: 16,
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: 10,
+    },
+    addFormTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, marginBottom: 4 },
+    input: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 14,
       fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+    },
+    inputRow: { flexDirection: "row", gap: 8 },
+    inputHalf: { flex: 1 },
+    addFormBtns: { flexDirection: "row", gap: 10 },
+    addBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+    },
+    cancelBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: colors.muted,
+      alignItems: "center",
+    },
+    addBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
+    cancelBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.foreground },
+    emptyText: {
+      textAlign: "center",
       color: colors.mutedForeground,
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      paddingVertical: 12,
     },
   });
 
-  const predBreakdown = data?.predictionBreakdown ?? {};
-  const predEntries = Object.entries(predBreakdown).sort((a, b) => b[1] - a[1]);
+  const accuracyColor =
+    accuracy == null ? colors.mutedForeground
+    : accuracy >= 70 ? "#3D8B37"
+    : accuracy >= 50 ? "#D4851A"
+    : "#D94F4F";
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Analytics</Text>
-        <Pressable
-          style={styles.refreshBtn}
-          onPress={() => refetch()}
-          testID="stats-refresh-btn"
-        >
+        <Pressable style={styles.refreshBtn} onPress={refetchAll} testID="stats-refresh-btn">
           <Feather
             name="refresh-cw"
             size={16}
@@ -136,41 +328,242 @@ export default function StatsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
-            onRefresh={() => refetch()}
+            onRefresh={refetchAll}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        {data?.lastReading && (
+        {statsData?.lastReading && (
           <View style={[styles.lastReadingRow, { marginTop: 12 }]}>
             <Feather name="clock" size={12} color={colors.mutedForeground} />
             <Text style={styles.lastReadingText}>
-              Last reading: {new Date(data.lastReading).toLocaleString()}
+              Last reading: {new Date(statsData.lastReading).toLocaleString()}
             </Text>
           </View>
         )}
 
+        {/* Averages */}
         <Text style={styles.sectionLabel}>AVERAGES</Text>
-        <StatsPanel stats={data} isLoading={isLoading} />
+        <StatsPanel stats={statsData} isLoading={statsLoading} />
 
+        {/* AI Prediction breakdown */}
         {predEntries.length > 0 && (
           <>
             <Text style={[styles.sectionLabel, { marginTop: 20 }]}>AI PREDICTIONS</Text>
-            <View style={styles.predCard}>
+            <View style={styles.card}>
               {predEntries.map(([pred, count], idx) => (
                 <View
                   key={pred}
-                  style={idx === predEntries.length - 1 ? styles.predItemLast : styles.predItem}
+                  style={idx === predEntries.length - 1 ? styles.rowLast : styles.row}
                 >
-                  <Text style={styles.predLabel}>{pred}</Text>
-                  <Text style={styles.predCount}>{count}</Text>
+                  <Text style={styles.label}>{pred}</Text>
+                  <Text style={styles.value}>{count}</Text>
                 </View>
               ))}
             </View>
           </>
         )}
+
+        {/* ML Accuracy */}
+        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>ML ACCURACY</Text>
+        <View style={styles.card}>
+          <View style={styles.accuracyRow}>
+            <View style={[styles.ringContainer, { borderColor: accuracyColor }]}>
+              <Text style={[styles.ringPct, { color: accuracyColor }]}>
+                {accuracy != null ? `${accuracy}%` : "–"}
+              </Text>
+            </View>
+            <View style={styles.accuracyMeta}>
+              <Text style={styles.accuracyTitle}>
+                {accuracy != null ? "Prediction Accuracy" : "No feedback yet"}
+              </Text>
+              <Text style={styles.accuracySub}>
+                {metricsData?.predictions?.resolved ?? 0} resolved · {metricsData?.predictions?.total ?? 0} total
+              </Text>
+              {metricsData?.observations != null && (
+                <Text style={styles.accuracySub}>
+                  {metricsData.observations} observations in DB
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {model ? (
+            <>
+              <View style={styles.row}>
+                <Text style={styles.label}>Model</Text>
+                <Text style={styles.mutedValue}>{model.version}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.label}>Training samples</Text>
+                <Text style={styles.value}>{model.trainingSamples}</Text>
+              </View>
+              <View style={styles.rowLast}>
+                <Text style={styles.label}>Training accuracy</Text>
+                <Text style={styles.value}>{model.accuracy}%</Text>
+              </View>
+            </>
+          ) : (
+            <View style={{ paddingTop: 12 }}>
+              <Text style={styles.emptyText}>No model trained yet. Tap "Train Model" below.</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Action buttons */}
+        <View style={[styles.actionRow, { marginTop: 20 }]}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => collectMutation.mutate()}
+            disabled={collectMutation.isPending || locations.length === 0}
+            activeOpacity={0.8}
+          >
+            {collectMutation.isPending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Feather name="cloud-rain" size={14} color="#fff" />
+            )}
+            <Text style={styles.actionBtnText}>Collect Now</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: "#3D8B37" }]}
+            onPress={() => trainMutation.mutate()}
+            disabled={trainMutation.isPending || (metricsData?.observations ?? 0) < 5}
+            activeOpacity={0.8}
+          >
+            {trainMutation.isPending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Feather name="cpu" size={14} color="#fff" />
+            )}
+            <Text style={styles.actionBtnText}>Train Model</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Tracked Locations */}
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 24, marginBottom: 10 }}>
+          <Text style={[styles.sectionLabel, { marginBottom: 0, flex: 1 }]}>TRACKED LOCATIONS</Text>
+          <TouchableOpacity
+            onPress={() => setShowAddLocation(!showAddLocation)}
+            style={{ marginRight: 20, flexDirection: "row", alignItems: "center", gap: 4 }}
+          >
+            <Feather name={showAddLocation ? "x" : "plus"} size={14} color={colors.primary} />
+            <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.primary }}>
+              {showAddLocation ? "Cancel" : "Add"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {showAddLocation && (
+          <View style={[styles.addForm, { marginBottom: 12 }]}>
+            <Text style={styles.addFormTitle}>Add tracked location</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Location name (e.g. North Field)"
+              placeholderTextColor={colors.mutedForeground}
+              value={newName}
+              onChangeText={setNewName}
+            />
+            <View style={styles.inputRow}>
+              <View style={styles.inputHalf}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Latitude"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={newLat}
+                  onChangeText={setNewLat}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.inputHalf}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Longitude"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={newLon}
+                  onChangeText={setNewLon}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+            <View style={styles.addFormBtns}>
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={handleAddLocation}
+                disabled={addLocationMutation.isPending}
+              >
+                {addLocationMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.addBtnText}>Add Location</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddLocation(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        <View style={styles.card}>
+          {locationsLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
+          ) : locations.length === 0 ? (
+            <Text style={styles.emptyText}>
+              No tracked locations yet. Add one above to enable automatic hourly collection.
+            </Text>
+          ) : (
+            locations.map((loc, idx) => {
+              const isLast = idx === locations.length - 1;
+              return (
+                <View key={loc.id} style={isLast ? styles.locationItemLast : styles.locationItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.locationName}>{loc.name}</Text>
+                    <Text style={styles.locationCoords}>
+                      {loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}
+                    </Text>
+                  </View>
+                  <View style={styles.locationActions}>
+                    <View
+                      style={[
+                        styles.locationBadge,
+                        { backgroundColor: loc.active ? "#E8F5E9" : colors.muted },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.locationBadgeText,
+                          { color: loc.active ? "#3D8B37" : colors.mutedForeground },
+                        ]}
+                      >
+                        {loc.active ? "ACTIVE" : "PAUSED"}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() =>
+                        loc.active
+                          ? deactivateMutation.mutate({ id: loc.id })
+                          : activateMutation.mutate({ id: loc.id })
+                      }
+                    >
+                      <Feather
+                        name={loc.active ? "pause-circle" : "play-circle"}
+                        size={20}
+                        color={loc.active ? colors.mutedForeground : colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => confirmDelete(loc.id, loc.name)}>
+                      <Feather name="trash-2" size={18} color="#D94F4F" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+
       </ScrollView>
     </View>
   );

@@ -215,6 +215,118 @@ export interface WeatherStats {
   lastReading: string | null;
 }
 
+export interface TrackedLocation {
+  id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface AddLocationRequest {
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  name: string;
+  /**
+   * @minimum -90
+   * @maximum 90
+   */
+  latitude: number;
+  /**
+   * @minimum -180
+   * @maximum 180
+   */
+  longitude: number;
+}
+
+export interface LocationsResponse {
+  locations: TrackedLocation[];
+}
+
+export interface CollectionResult {
+  location: string;
+  lat: number;
+  lon: number;
+  success: boolean;
+  error?: string | null;
+}
+
+export interface CollectionResponse {
+  /** Number of locations successfully collected */
+  collected: number;
+  /** Total locations attempted */
+  total: number;
+  results: CollectionResult[];
+}
+
+export type MetricsResponsePredictions = {
+  /** Total formal predictions stored */
+  total: number;
+  /** Predictions with feedback resolved */
+  resolved: number;
+  correct: number;
+  /** Percentage accuracy 0-100, null if no resolved predictions */
+  accuracy: number | null;
+};
+
+export type MetricsResponseModel = {
+  version: string;
+  trainedAt: string;
+  trainingSamples: number;
+  accuracy: number;
+} | null;
+
+export interface MetricsResponse {
+  predictions: MetricsResponsePredictions;
+  model: MetricsResponseModel;
+  /** Total weather observations in the database */
+  observations: number;
+}
+
+export interface TrainResponse {
+  trainingSamples: number;
+  /** Training accuracy percentage */
+  accuracy: number;
+  message: string;
+}
+
+/**
+ * Whether rain is predicted within the next 2 hours
+ */
+export type RainPredictionResponsePredictionValue =
+  (typeof RainPredictionResponsePredictionValue)[keyof typeof RainPredictionResponsePredictionValue];
+
+export const RainPredictionResponsePredictionValue = {
+  yes: "yes",
+  no: "no",
+} as const;
+
+export type RainPredictionResponseCurrentConditions = {
+  temperature: number;
+  humidity: number;
+  pressure: number;
+  windspeed: number;
+  weathercode: number;
+};
+
+export interface RainPredictionResponse {
+  /** Whether rain is predicted within the next 2 hours */
+  predictionValue: RainPredictionResponsePredictionValue;
+  /** Confidence score 0-1 */
+  confidence: number;
+  /** Raw probability 0-1 */
+  probability: number;
+  modelVersion: string;
+  lat: number;
+  lon: number;
+  /** The time this prediction is for (now + 2h) */
+  targetTime: string;
+  currentConditions: RainPredictionResponseCurrentConditions;
+}
+
 export type GetWeatherParams = {
   /**
    * Latitude
@@ -261,4 +373,32 @@ export type GetWeatherAlertsParams = {
    * Longitude
    */
   lon: number;
+};
+
+export type GetRainPredictionParams = {
+  /**
+   * Latitude
+   */
+  lat: number;
+  /**
+   * Longitude
+   */
+  lon: number;
+};
+
+export type AddLocation201 = {
+  location: TrackedLocation;
+};
+
+export type ActivateLocation200 = {
+  location: TrackedLocation;
+};
+
+export type DeactivateLocation200 = {
+  location: TrackedLocation;
+};
+
+export type DeleteLocation200 = {
+  deleted: boolean;
+  location: TrackedLocation;
 };

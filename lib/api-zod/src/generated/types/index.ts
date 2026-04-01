@@ -6,19 +6,36 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./activateLocation200";
+export * from "./addLocation201";
+export * from "./addLocationRequest";
 export * from "./aIPrediction";
 export * from "./alertsResponse";
+export * from "./collectionResponse";
+export * from "./collectionResult";
 export * from "./dailyForecast";
 export * from "./dailyForecastDiseasePressure";
 export * from "./dailyForecastFrostRisk";
 export * from "./dailyForecastHeatRisk";
+export * from "./deactivateLocation200";
+export * from "./deleteLocation200";
 export * from "./errorResponse";
 export * from "./forecastResponse";
+export * from "./getRainPredictionParams";
 export * from "./getWeatherAlertsParams";
 export * from "./getWeatherForecastParams";
 export * from "./getWeatherHistoryParams";
 export * from "./getWeatherParams";
 export * from "./healthStatus";
+export * from "./locationsResponse";
+export * from "./metricsResponse";
+export * from "./metricsResponseModel";
+export * from "./metricsResponsePredictions";
+export * from "./rainPredictionResponse";
+export * from "./rainPredictionResponseCurrentConditions";
+export * from "./rainPredictionResponsePredictionValue";
+export * from "./trackedLocation";
+export * from "./trainResponse";
 export * from "./weatherAlert";
 export * from "./weatherAlertSeverity";
 export * from "./weatherAlertType";

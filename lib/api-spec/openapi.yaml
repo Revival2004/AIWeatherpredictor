@@ -11,6 +11,10 @@ tags:
     description: Health operations
   - name: weather
     description: Weather prediction operations
+  - name: locations
+    description: Tracked location management
+  - name: ml
+    description: ML model training and prediction metrics
 paths:
   /healthz:
     get:
@@ -192,6 +196,241 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WeatherStats"
+
+  /weather/rain:
+    get:
+      operationId: getRainPrediction
+      tags: [weather, ml]
+      summary: Get ML rain prediction
+      description: Returns a binary rain prediction (yes/no + confidence) using the trained logistic regression model
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Latitude
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Longitude
+      responses:
+        "200":
+          description: Rain prediction result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RainPredictionResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /locations:
+    get:
+      operationId: getLocations
+      tags: [locations]
+      summary: List tracked locations
+      description: Returns all registered tracked locations (active and inactive)
+      responses:
+        "200":
+          description: List of tracked locations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationsResponse"
+    post:
+      operationId: addLocation
+      tags: [locations]
+      summary: Add a tracked location
+      description: Register a new location for automatic hourly weather collection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddLocationRequest"
+      responses:
+        "201":
+          description: Location created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  location:
+                    $ref: "#/components/schemas/TrackedLocation"
+                required:
+                  - location
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /locations/{id}/activate:
+    put:
+      operationId: activateLocation
+      tags: [locations]
+      summary: Activate a location
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Location activated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  location:
+                    $ref: "#/components/schemas/TrackedLocation"
+                required:
+                  - location
+        "404":
+          description: Location not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /locations/{id}/deactivate:
+    put:
+      operationId: deactivateLocation
+      tags: [locations]
+      summary: Deactivate a location
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Location deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  location:
+                    $ref: "#/components/schemas/TrackedLocation"
+                required:
+                  - location
+        "404":
+          description: Location not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /locations/{id}:
+    delete:
+      operationId: deleteLocation
+      tags: [locations]
+      summary: Delete a tracked location
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Location deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                  location:
+                    $ref: "#/components/schemas/TrackedLocation"
+                required:
+                  - deleted
+                  - location
+        "404":
+          description: Location not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /collect:
+    post:
+      operationId: triggerCollection
+      tags: [ml]
+      summary: Trigger manual weather collection
+      description: Immediately collect weather for all active tracked locations (the scheduler runs this hourly)
+      responses:
+        "200":
+          description: Collection results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [ml]
+      summary: Get prediction accuracy metrics
+      description: Returns ML model accuracy, total predictions, and observation counts
+      responses:
+        "200":
+          description: Prediction metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricsResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /train:
+    post:
+      operationId: trainModel
+      tags: [ml]
+      summary: Retrain the ML model
+      description: Trains the logistic regression model on all historical weather observations. Returns training accuracy and number of samples used.
+      responses:
+        "200":
+          description: Training results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -512,3 +751,211 @@ components:
         - avgHumidity
         - predictionBreakdown
         - lastReading
+
+    TrackedLocation:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - latitude
+        - longitude
+        - active
+        - createdAt
+
+    AddLocationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+      required:
+        - name
+        - latitude
+        - longitude
+
+    LocationsResponse:
+      type: object
+      properties:
+        locations:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackedLocation"
+      required:
+        - locations
+
+    CollectionResult:
+      type: object
+      properties:
+        location:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+      required:
+        - location
+        - lat
+        - lon
+        - success
+
+    CollectionResponse:
+      type: object
+      properties:
+        collected:
+          type: integer
+          description: Number of locations successfully collected
+        total:
+          type: integer
+          description: Total locations attempted
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/CollectionResult"
+      required:
+        - collected
+        - total
+        - results
+
+    MetricsResponse:
+      type: object
+      properties:
+        predictions:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: Total formal predictions stored
+            resolved:
+              type: integer
+              description: Predictions with feedback resolved
+            correct:
+              type: integer
+            accuracy:
+              type: number
+              nullable: true
+              description: Percentage accuracy 0-100, null if no resolved predictions
+          required:
+            - total
+            - resolved
+            - correct
+            - accuracy
+        model:
+          type: object
+          nullable: true
+          properties:
+            version:
+              type: string
+            trainedAt:
+              type: string
+              format: date-time
+            trainingSamples:
+              type: integer
+            accuracy:
+              type: number
+          required:
+            - version
+            - trainedAt
+            - trainingSamples
+            - accuracy
+        observations:
+          type: integer
+          description: Total weather observations in the database
+      required:
+        - predictions
+        - model
+        - observations
+
+    TrainResponse:
+      type: object
+      properties:
+        trainingSamples:
+          type: integer
+        accuracy:
+          type: number
+          description: Training accuracy percentage
+        message:
+          type: string
+      required:
+        - trainingSamples
+        - accuracy
+        - message
+
+    RainPredictionResponse:
+      type: object
+      properties:
+        predictionValue:
+          type: string
+          enum: [yes, no]
+          description: Whether rain is predicted within the next 2 hours
+        confidence:
+          type: number
+          description: Confidence score 0-1
+        probability:
+          type: number
+          description: Raw probability 0-1
+        modelVersion:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+        targetTime:
+          type: string
+          format: date-time
+          description: The time this prediction is for (now + 2h)
+        currentConditions:
+          type: object
+          properties:
+            temperature:
+              type: number
+            humidity:
+              type: number
+            pressure:
+              type: number
+            windspeed:
+              type: number
+            weathercode:
+              type: integer
+          required:
+            - temperature
+            - humidity
+            - pressure
+            - windspeed
+            - weathercode
+      required:
+        - predictionValue
+        - confidence
+        - probability
+        - modelVersion
+        - lat
+        - lon
+        - targetTime
+        - currentConditions
