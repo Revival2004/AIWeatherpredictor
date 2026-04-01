@@ -7,10 +7,21 @@
  */
 
 export * from "./aIPrediction";
+export * from "./alertsResponse";
+export * from "./dailyForecast";
+export * from "./dailyForecastDiseasePressure";
+export * from "./dailyForecastFrostRisk";
+export * from "./dailyForecastHeatRisk";
 export * from "./errorResponse";
+export * from "./forecastResponse";
+export * from "./getWeatherAlertsParams";
+export * from "./getWeatherForecastParams";
 export * from "./getWeatherHistoryParams";
 export * from "./getWeatherParams";
 export * from "./healthStatus";
+export * from "./weatherAlert";
+export * from "./weatherAlertSeverity";
+export * from "./weatherAlertType";
 export * from "./weatherData";
 export * from "./weatherPredictionResponse";
 export * from "./weatherPredictionResponseLocation";

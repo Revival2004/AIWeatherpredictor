@@ -71,9 +71,15 @@ Table: `weather_data`
 - created_at (timestamp)
 
 ### API Endpoints
-- `GET /api/weather?lat=&lon=` — Fetch, predict, store, and return weather
+- `GET /api/weather?lat=&lon=` — Fetch, predict, store, and return weather (kNN+rules adaptive AI)
 - `GET /api/weather/history?limit=&lat=&lon=` — Historical readings
 - `GET /api/weather/stats` — Aggregated statistics
+- `GET /api/weather/forecast?lat=&lon=` — 7-day farm forecast: field day scores (0-10), frost/heat risk, GDD, farm action cards, irrigation needs, disease pressure
+- `GET /api/weather/alerts?lat=&lon=` — Prioritized crop warnings: frost, heat, heavy rain, wind, disease, irrigation deficit, spray/harvest windows
+
+### Backend Services
+- `forecastService.ts` — fetches 7-day Open-Meteo daily data, computes per-day agriculture intelligence
+- `alertsService.ts` — generates prioritized WeatherAlert objects from forecast data with actionRequired steps
 
 ## TypeScript & Composite Projects
 
@@ -106,11 +112,14 @@ React + Vite frontend for the weather predictor. Atmospheric blue/teal design.
 
 ### `artifacts/weather-mobile` (`@workspace/weather-mobile`)
 
-Expo mobile app for Android/iOS. Leaf green (#3D8B37) and soil brown (#8B5A2B) color scheme on a warm parchment background (#F5F0E8). Three tabs:
-- **Dashboard** — geolocation fetch, hero weather card, farming tip, condition cards
+Expo mobile app for Android/iOS. Leaf green (#3D8B37) and soil brown (#8B5A2B) color scheme on a warm parchment background (#F5F0E8). Four tabs:
+- **Dashboard** — geolocation fetch, hero weather card, live AlertsBanner for active crop warnings, farming tip, condition cards
+- **Forecast** — 7-day farm forecast with CropSelector, ForecastDayCard (field day score, farm actions, risk pills), GDDWidget (Growing Degree Days + irrigation deficit), AlertsBanner
 - **History** — paginated list of past readings with WMO condition icons  
 - **Analytics** — average stats tiles + prediction breakdown bars
 Connects to the shared API via `@workspace/api-client-react` hooks. Sets `setBaseUrl` from `EXPO_PUBLIC_DOMAIN` in `_layout.tsx`.
+
+New components: `AlertsBanner`, `ForecastDayCard`, `GDDWidget`, `CropSelector`
 
 ### `lib/db` (`@workspace/db`)
 

@@ -95,6 +95,97 @@ export const GetWeatherHistoryResponse = zod.array(
 );
 
 /**
+ * Returns a 7-day daily forecast with farm action cards, field day scores, GDD, frost risk, irrigation needs, and disease pressure
+ * @summary Get 7-day farm forecast
+ */
+export const GetWeatherForecastQueryParams = zod.object({
+  lat: zod.coerce.number().describe("Latitude"),
+  lon: zod.coerce.number().describe("Longitude"),
+});
+
+export const GetWeatherForecastResponse = zod.object({
+  days: zod.array(
+    zod.object({
+      date: zod.string().describe("Date in YYYY-MM-DD format"),
+      tempMax: zod.number(),
+      tempMin: zod.number(),
+      precipitationSum: zod.number().describe("Total precipitation in mm"),
+      precipitationProbability: zod
+        .number()
+        .describe("Max precipitation probability 0-100"),
+      windspeedMax: zod.number().describe("Max wind speed in km\/h"),
+      uvIndexMax: zod.number(),
+      weathercode: zod.number(),
+      avgHumidity: zod.number().describe("Average relative humidity 0-100"),
+      fieldDayScore: zod
+        .number()
+        .describe("Farm field day score 0-10 (10 = perfect conditions)"),
+      farmActions: zod
+        .array(zod.string())
+        .describe("Recommended farm actions for this day"),
+      frostRisk: zod.enum(["none", "low", "moderate", "high", "severe"]),
+      heatRisk: zod.enum(["none", "low", "moderate", "high"]),
+      diseasePressure: zod.enum(["low", "moderate", "high"]),
+      irrigationNeeded: zod.boolean(),
+      sprayWindowOpen: zod
+        .boolean()
+        .describe("True if wind and rain conditions allow spraying"),
+      gdd: zod
+        .number()
+        .describe("Growing Degree Days for this day (base 10°C)"),
+    }),
+  ),
+  cumulativeGDD: zod
+    .number()
+    .describe("Total Growing Degree Days accumulated over forecast period"),
+  irrigationDeficit: zod
+    .number()
+    .describe("Water deficit in mm (ET0 - precipitation)"),
+  latitude: zod.number(),
+  longitude: zod.number(),
+});
+
+/**
+ * Returns prioritized weather alerts and crop warnings for the next 72 hours
+ * @summary Get active weather alerts
+ */
+export const GetWeatherAlertsQueryParams = zod.object({
+  lat: zod.coerce.number().describe("Latitude"),
+  lon: zod.coerce.number().describe("Longitude"),
+});
+
+export const GetWeatherAlertsResponse = zod.object({
+  alerts: zod.array(
+    zod.object({
+      id: zod.string(),
+      severity: zod.enum(["info", "warning", "critical"]),
+      type: zod.enum([
+        "frost",
+        "heat",
+        "heavy_rain",
+        "strong_wind",
+        "disease",
+        "irrigation",
+        "spray_window",
+        "harvest_window",
+      ]),
+      title: zod.string(),
+      message: zod.string(),
+      actionRequired: zod
+        .string()
+        .describe("Specific action the farmer should take"),
+      validFrom: zod
+        .string()
+        .describe("Date or datetime when alert is valid from"),
+      validUntil: zod.string().describe("Date or datetime when alert expires"),
+      daysAhead: zod.number().describe("How many days until this event occurs"),
+    }),
+  ),
+  activeCount: zod.number(),
+  criticalCount: zod.number(),
+});
+
+/**
  * Returns aggregated statistics about collected weather data
  * @summary Get weather statistics
  */

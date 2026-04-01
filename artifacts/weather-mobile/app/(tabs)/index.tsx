@@ -14,9 +14,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   useGetWeather,
+  useGetWeatherAlerts,
   type WeatherPredictionResponse,
 } from "@workspace/api-client-react";
 import { WeatherHeroCard } from "@/components/WeatherHeroCard";
+import AlertsBanner from "@/components/AlertsBanner";
 import { useColors } from "@/hooks/useColors";
 
 interface Coords {
@@ -65,6 +67,16 @@ export default function DashboardScreen() {
       query: {
         enabled: fetchEnabled && coords !== null,
         staleTime: 5 * 60 * 1000,
+      },
+    }
+  );
+
+  const { data: alertsData, refetch: refetchAlerts } = useGetWeatherAlerts(
+    { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
+    {
+      query: {
+        enabled: fetchEnabled && coords !== null,
+        staleTime: 10 * 60 * 1000,
       },
     }
   );
@@ -217,7 +229,7 @@ export default function DashboardScreen() {
         refreshControl={
           <RefreshControl
             refreshing={!!weatherLoading && fetchEnabled}
-            onRefresh={() => refetch()}
+            onRefresh={() => { refetch(); refetchAlerts(); }}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
@@ -230,6 +242,10 @@ export default function DashboardScreen() {
           error={weatherError as Error | null}
           onRefresh={() => refetch()}
         />
+
+        {alertsData && alertsData.alerts.length > 0 && (
+          <AlertsBanner alerts={alertsData.alerts} />
+        )}
 
         {weatherData && (
           <>

@@ -16,6 +16,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "cloud.sun", selected: "cloud.sun.fill" }} />
         <Label>Dashboard</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="forecast">
+        <Icon sf={{ default: "calendar.badge.clock", selected: "calendar.badge.clock" }} />
+        <Label>Forecast</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="history">
         <Icon sf={{ default: "clock", selected: "clock.fill" }} />
         <Label>History</Label>
@@ -75,6 +79,18 @@ function ClassicTabLayout() {
               <SymbolView name="cloud.sun" tintColor={color} size={24} />
             ) : (
               <Feather name="cloud" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="forecast"
+        options={{
+          title: "Forecast",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="calendar" tintColor={color} size={24} />
+            ) : (
+              <Feather name="calendar" size={22} color={color} />
             ),
         }}
       />

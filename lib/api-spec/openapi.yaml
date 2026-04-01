@@ -101,6 +101,84 @@ paths:
                 items:
                   $ref: "#/components/schemas/WeatherRecord"
 
+  /weather/forecast:
+    get:
+      operationId: getWeatherForecast
+      tags: [weather]
+      summary: Get 7-day farm forecast
+      description: Returns a 7-day daily forecast with farm action cards, field day scores, GDD, frost risk, irrigation needs, and disease pressure
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Latitude
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Longitude
+      responses:
+        "200":
+          description: 7-day farm forecast
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /weather/alerts:
+    get:
+      operationId: getWeatherAlerts
+      tags: [weather]
+      summary: Get active weather alerts
+      description: Returns prioritized weather alerts and crop warnings for the next 72 hours
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Latitude
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Longitude
+      responses:
+        "200":
+          description: Active weather alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertsResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /weather/stats:
     get:
       operationId: getWeatherStats
@@ -254,6 +332,154 @@ components:
         - confidence
         - reasoning
         - createdAt
+
+    DailyForecast:
+      type: object
+      properties:
+        date:
+          type: string
+          description: Date in YYYY-MM-DD format
+        tempMax:
+          type: number
+        tempMin:
+          type: number
+        precipitationSum:
+          type: number
+          description: Total precipitation in mm
+        precipitationProbability:
+          type: number
+          description: Max precipitation probability 0-100
+        windspeedMax:
+          type: number
+          description: Max wind speed in km/h
+        uvIndexMax:
+          type: number
+        weathercode:
+          type: integer
+        avgHumidity:
+          type: number
+          description: Average relative humidity 0-100
+        fieldDayScore:
+          type: number
+          description: Farm field day score 0-10 (10 = perfect conditions)
+        farmActions:
+          type: array
+          items:
+            type: string
+          description: Recommended farm actions for this day
+        frostRisk:
+          type: string
+          enum: [none, low, moderate, high, severe]
+        heatRisk:
+          type: string
+          enum: [none, low, moderate, high]
+        diseasePressure:
+          type: string
+          enum: [low, moderate, high]
+        irrigationNeeded:
+          type: boolean
+        sprayWindowOpen:
+          type: boolean
+          description: True if wind and rain conditions allow spraying
+        gdd:
+          type: number
+          description: Growing Degree Days for this day (base 10°C)
+      required:
+        - date
+        - tempMax
+        - tempMin
+        - precipitationSum
+        - precipitationProbability
+        - windspeedMax
+        - uvIndexMax
+        - weathercode
+        - avgHumidity
+        - fieldDayScore
+        - farmActions
+        - frostRisk
+        - heatRisk
+        - diseasePressure
+        - irrigationNeeded
+        - sprayWindowOpen
+        - gdd
+
+    ForecastResponse:
+      type: object
+      properties:
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyForecast"
+        cumulativeGDD:
+          type: number
+          description: Total Growing Degree Days accumulated over forecast period
+        irrigationDeficit:
+          type: number
+          description: Water deficit in mm (ET0 - precipitation)
+        latitude:
+          type: number
+        longitude:
+          type: number
+      required:
+        - days
+        - cumulativeGDD
+        - irrigationDeficit
+        - latitude
+        - longitude
+
+    WeatherAlert:
+      type: object
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        type:
+          type: string
+          enum: [frost, heat, heavy_rain, strong_wind, disease, irrigation, spray_window, harvest_window]
+        title:
+          type: string
+        message:
+          type: string
+        actionRequired:
+          type: string
+          description: Specific action the farmer should take
+        validFrom:
+          type: string
+          description: Date or datetime when alert is valid from
+        validUntil:
+          type: string
+          description: Date or datetime when alert expires
+        daysAhead:
+          type: integer
+          description: How many days until this event occurs
+      required:
+        - id
+        - severity
+        - type
+        - title
+        - message
+        - actionRequired
+        - validFrom
+        - validUntil
+        - daysAhead
+
+    AlertsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeatherAlert"
+        activeCount:
+          type: integer
+        criticalCount:
+          type: integer
+      required:
+        - alerts
+        - activeCount
+        - criticalCount
 
     WeatherStats:
       type: object

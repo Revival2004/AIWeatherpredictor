@@ -3,6 +3,8 @@ import { db, weatherDataTable } from "@workspace/db";
 import { desc, eq, and, gte, lte, sql, count, avg } from "drizzle-orm";
 import { fetchWeather } from "../lib/weatherService.js";
 import { predictWithHistory, type HistoricalRecord } from "../lib/aiService.js";
+import { fetchForecast } from "../lib/forecastService.js";
+import { generateAlerts } from "../lib/alertsService.js";
 import {
   GetWeatherQueryParams,
   GetWeatherResponse,
@@ -196,6 +198,51 @@ router.get("/weather/history", async (req, res): Promise<void> => {
   );
 
   res.json(response);
+});
+
+/**
+ * GET /weather/forecast
+ * Returns a 7-day farm forecast with field scores, GDD, and action cards.
+ */
+router.get("/weather/forecast", async (req, res): Promise<void> => {
+  const parsed = GetWeatherQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { lat, lon } = parsed.data;
+
+  try {
+    const forecast = await fetchForecast(lat, lon);
+    res.json(forecast);
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch forecast");
+    res.status(500).json({ error: "Failed to fetch forecast data." });
+  }
+});
+
+/**
+ * GET /weather/alerts
+ * Returns prioritized crop and weather alerts for the next 72–168 hours.
+ */
+router.get("/weather/alerts", async (req, res): Promise<void> => {
+  const parsed = GetWeatherQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { lat, lon } = parsed.data;
+
+  try {
+    const forecast = await fetchForecast(lat, lon);
+    const alertsResult = generateAlerts(forecast);
+    res.json(alertsResult);
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate alerts");
+    res.status(500).json({ error: "Failed to generate weather alerts." });
+  }
 });
 
 /**

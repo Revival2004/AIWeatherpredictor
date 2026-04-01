@@ -14,7 +14,11 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AlertsResponse,
   ErrorResponse,
+  ForecastResponse,
+  GetWeatherAlertsParams,
+  GetWeatherForecastParams,
   GetWeatherHistoryParams,
   GetWeatherParams,
   HealthStatus,
@@ -293,6 +297,202 @@ export function useGetWeatherHistory<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetWeatherHistoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns a 7-day daily forecast with farm action cards, field day scores, GDD, frost risk, irrigation needs, and disease pressure
+ * @summary Get 7-day farm forecast
+ */
+export const getGetWeatherForecastUrl = (params: GetWeatherForecastParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/weather/forecast?${stringifiedParams}`
+    : `/api/weather/forecast`;
+};
+
+export const getWeatherForecast = async (
+  params: GetWeatherForecastParams,
+  options?: RequestInit,
+): Promise<ForecastResponse> => {
+  return customFetch<ForecastResponse>(getGetWeatherForecastUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWeatherForecastQueryKey = (
+  params?: GetWeatherForecastParams,
+) => {
+  return [`/api/weather/forecast`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetWeatherForecastQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWeatherForecast>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetWeatherForecastParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWeatherForecast>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetWeatherForecastQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWeatherForecast>>
+  > = ({ signal }) => getWeatherForecast(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWeatherForecast>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWeatherForecastQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWeatherForecast>>
+>;
+export type GetWeatherForecastQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get 7-day farm forecast
+ */
+
+export function useGetWeatherForecast<
+  TData = Awaited<ReturnType<typeof getWeatherForecast>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetWeatherForecastParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWeatherForecast>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWeatherForecastQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns prioritized weather alerts and crop warnings for the next 72 hours
+ * @summary Get active weather alerts
+ */
+export const getGetWeatherAlertsUrl = (params: GetWeatherAlertsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/weather/alerts?${stringifiedParams}`
+    : `/api/weather/alerts`;
+};
+
+export const getWeatherAlerts = async (
+  params: GetWeatherAlertsParams,
+  options?: RequestInit,
+): Promise<AlertsResponse> => {
+  return customFetch<AlertsResponse>(getGetWeatherAlertsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWeatherAlertsQueryKey = (
+  params?: GetWeatherAlertsParams,
+) => {
+  return [`/api/weather/alerts`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetWeatherAlertsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWeatherAlerts>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetWeatherAlertsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWeatherAlerts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetWeatherAlertsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWeatherAlerts>>
+  > = ({ signal }) => getWeatherAlerts(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWeatherAlerts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWeatherAlertsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWeatherAlerts>>
+>;
+export type GetWeatherAlertsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get active weather alerts
+ */
+
+export function useGetWeatherAlerts<
+  TData = Awaited<ReturnType<typeof getWeatherAlerts>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetWeatherAlertsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWeatherAlerts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWeatherAlertsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -69,6 +69,120 @@ export interface WeatherRecord {
   createdAt: string;
 }
 
+export type DailyForecastFrostRisk =
+  (typeof DailyForecastFrostRisk)[keyof typeof DailyForecastFrostRisk];
+
+export const DailyForecastFrostRisk = {
+  none: "none",
+  low: "low",
+  moderate: "moderate",
+  high: "high",
+  severe: "severe",
+} as const;
+
+export type DailyForecastHeatRisk =
+  (typeof DailyForecastHeatRisk)[keyof typeof DailyForecastHeatRisk];
+
+export const DailyForecastHeatRisk = {
+  none: "none",
+  low: "low",
+  moderate: "moderate",
+  high: "high",
+} as const;
+
+export type DailyForecastDiseasePressure =
+  (typeof DailyForecastDiseasePressure)[keyof typeof DailyForecastDiseasePressure];
+
+export const DailyForecastDiseasePressure = {
+  low: "low",
+  moderate: "moderate",
+  high: "high",
+} as const;
+
+export interface DailyForecast {
+  /** Date in YYYY-MM-DD format */
+  date: string;
+  tempMax: number;
+  tempMin: number;
+  /** Total precipitation in mm */
+  precipitationSum: number;
+  /** Max precipitation probability 0-100 */
+  precipitationProbability: number;
+  /** Max wind speed in km/h */
+  windspeedMax: number;
+  uvIndexMax: number;
+  weathercode: number;
+  /** Average relative humidity 0-100 */
+  avgHumidity: number;
+  /** Farm field day score 0-10 (10 = perfect conditions) */
+  fieldDayScore: number;
+  /** Recommended farm actions for this day */
+  farmActions: string[];
+  frostRisk: DailyForecastFrostRisk;
+  heatRisk: DailyForecastHeatRisk;
+  diseasePressure: DailyForecastDiseasePressure;
+  irrigationNeeded: boolean;
+  /** True if wind and rain conditions allow spraying */
+  sprayWindowOpen: boolean;
+  /** Growing Degree Days for this day (base 10°C) */
+  gdd: number;
+}
+
+export interface ForecastResponse {
+  days: DailyForecast[];
+  /** Total Growing Degree Days accumulated over forecast period */
+  cumulativeGDD: number;
+  /** Water deficit in mm (ET0 - precipitation) */
+  irrigationDeficit: number;
+  latitude: number;
+  longitude: number;
+}
+
+export type WeatherAlertSeverity =
+  (typeof WeatherAlertSeverity)[keyof typeof WeatherAlertSeverity];
+
+export const WeatherAlertSeverity = {
+  info: "info",
+  warning: "warning",
+  critical: "critical",
+} as const;
+
+export type WeatherAlertType =
+  (typeof WeatherAlertType)[keyof typeof WeatherAlertType];
+
+export const WeatherAlertType = {
+  frost: "frost",
+  heat: "heat",
+  heavy_rain: "heavy_rain",
+  strong_wind: "strong_wind",
+  disease: "disease",
+  irrigation: "irrigation",
+  spray_window: "spray_window",
+  harvest_window: "harvest_window",
+} as const;
+
+export interface WeatherAlert {
+  id: string;
+  severity: WeatherAlertSeverity;
+  type: WeatherAlertType;
+  title: string;
+  message: string;
+  /** Specific action the farmer should take */
+  actionRequired: string;
+  /** Date or datetime when alert is valid from */
+  validFrom: string;
+  /** Date or datetime when alert expires */
+  validUntil: string;
+  /** How many days until this event occurs */
+  daysAhead: number;
+}
+
+export interface AlertsResponse {
+  alerts: WeatherAlert[];
+  activeCount: number;
+  criticalCount: number;
+}
+
 /**
  * Count of each prediction type
  */
@@ -125,4 +239,26 @@ export type GetWeatherHistoryParams = {
    * Filter by longitude (approximate)
    */
   lon?: number;
+};
+
+export type GetWeatherForecastParams = {
+  /**
+   * Latitude
+   */
+  lat: number;
+  /**
+   * Longitude
+   */
+  lon: number;
+};
+
+export type GetWeatherAlertsParams = {
+  /**
+   * Latitude
+   */
+  lat: number;
+  /**
+   * Longitude
+   */
+  lon: number;
 };
