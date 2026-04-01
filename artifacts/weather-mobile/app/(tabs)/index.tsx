@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import React, { useState } from "react";
 import {
   Platform,
@@ -15,7 +16,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   useGetWeather,
   useGetWeatherAlerts,
+  useGetRainPrediction,
   type WeatherPredictionResponse,
+  type RainPredictionResponse,
 } from "@workspace/api-client-react";
 import { WeatherHeroCard } from "@/components/WeatherHeroCard";
 import AlertsBanner from "@/components/AlertsBanner";
@@ -49,12 +52,168 @@ function getFarmingTip(data: WeatherPredictionResponse | undefined): string | nu
   return "Conditions look favorable for outdoor farm work today.";
 }
 
+function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
+  const colors = useColors();
+  const willRain = data.predictionValue === "yes";
+  const pct = Math.round(data.probability * 100);
+  const confPct = Math.round(data.confidence * 100);
+  const isSklearn = data.modelVersion?.startsWith("sklearn");
+  const mp = data.modelProbabilities;
+
+  return (
+    <View
+      style={{
+        marginHorizontal: 16,
+        marginTop: 4,
+        borderRadius: 16,
+        overflow: "hidden",
+        borderWidth: 1,
+        borderColor: willRain ? "#3B82F620" : "#3D8B3720",
+        backgroundColor: willRain ? "#3B82F608" : "#3D8B3708",
+      }}
+    >
+      {/* Header row */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: 16,
+          paddingBottom: 12,
+          borderBottomWidth: 1,
+          borderColor: willRain ? "#3B82F618" : "#3D8B3718",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: willRain ? "#3B82F620" : "#3D8B3720",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather
+              name={willRain ? "cloud-rain" : "sun"}
+              size={20}
+              color={willRain ? "#3B82F6" : "#3D8B37"}
+            />
+          </View>
+          <View>
+            <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: colors.foreground }}>
+              {willRain ? "Rain expected in 2h" : "No rain in next 2h"}
+            </Text>
+            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+              AI ensemble prediction · {confPct}% confidence
+            </Text>
+          </View>
+        </View>
+        <View
+          style={{
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 20,
+            backgroundColor: willRain ? "#3B82F620" : "#3D8B3720",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 15,
+              fontFamily: "Inter_700Bold",
+              color: willRain ? "#3B82F6" : "#3D8B37",
+            }}
+          >
+            {pct}%
+          </Text>
+        </View>
+      </View>
+
+      {/* Probability bar */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: mp ? 8 : 16 }}>
+        <View style={{ height: 6, backgroundColor: colors.muted, borderRadius: 3, overflow: "hidden" }}>
+          <View
+            style={{
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: willRain ? "#3B82F6" : "#3D8B37",
+              width: `${pct}%`,
+            }}
+          />
+        </View>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginTop: 4,
+          }}
+        >
+          <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+            No rain
+          </Text>
+          <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+            Rain
+          </Text>
+        </View>
+      </View>
+
+      {/* Per-model votes (only if sklearn ensemble) */}
+      {isSklearn && mp && (
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginBottom: 14,
+            padding: 10,
+            backgroundColor: colors.muted,
+            borderRadius: 10,
+            flexDirection: "row",
+            justifyContent: "space-around",
+          }}
+        >
+          {[
+            { label: "LR", value: mp.lr, color: "#4A90D9" },
+            { label: "RF", value: mp.rf, color: "#3D8B37" },
+            { label: "GB", value: mp.gb, color: "#D4851A" },
+          ].map((m) => (
+            <View key={m.label} style={{ alignItems: "center", gap: 2 }}>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: m.color }}>
+                {Math.round(m.value * 100)}%
+              </Text>
+              <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                {m.label}
+              </Text>
+            </View>
+          ))}
+          <View style={{ width: 1, backgroundColor: colors.border }} />
+          <View style={{ alignItems: "center", gap: 2 }}>
+            <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: "#8B2FC9" }}>
+              {pct}%
+            </Text>
+            <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+              Ensemble
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Model badge */}
+      <View style={{ paddingHorizontal: 16, paddingBottom: 12, alignItems: "flex-end" }}>
+        <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+          {isSklearn ? "scikit-learn" : "rule-based"} · {data.modelVersion}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [coords, setCoords] = useState<Coords | null>(null);
   const [fetchEnabled, setFetchEnabled] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
 
   const {
     data: weatherData,
@@ -81,23 +240,54 @@ export default function DashboardScreen() {
     }
   );
 
-  const handleLocate = () => {
+  const { data: rainData, refetch: refetchRain } = useGetRainPrediction(
+    { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
+    {
+      query: {
+        enabled: fetchEnabled && coords !== null,
+        staleTime: 5 * 60 * 1000,
+      },
+    }
+  );
+
+  const handleLocate = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setGeoLoading(true);
+    setLocError(null);
 
-    const onSuccess = (pos: { coords: { latitude: number; longitude: number } }) => {
-      setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      setFetchEnabled(true);
-      setGeoLoading(false);
-    };
-
-    const onError = () => {
-      setGeoLoading(false);
-    };
-
-    if (typeof navigator !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(onSuccess, onError, { timeout: 10000 });
-    } else {
+    try {
+      if (Platform.OS === "web") {
+        if (typeof navigator !== "undefined" && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+              setFetchEnabled(true);
+              setGeoLoading(false);
+            },
+            () => {
+              setLocError("Location unavailable");
+              setGeoLoading(false);
+            },
+            { timeout: 10000 }
+          );
+        } else {
+          setLocError("Geolocation not supported");
+          setGeoLoading(false);
+        }
+      } else {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setLocError("Location permission denied");
+          setGeoLoading(false);
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        setFetchEnabled(true);
+        setGeoLoading(false);
+      }
+    } catch {
+      setLocError("Could not get location");
       setGeoLoading(false);
     }
   };
@@ -200,6 +390,13 @@ export default function DashboardScreen() {
       color: colors.secondary,
       lineHeight: 19,
     },
+    locErrorText: {
+      textAlign: "center",
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      marginTop: 8,
+    },
   });
 
   const farmingTip = getFarmingTip(weatherData);
@@ -224,12 +421,16 @@ export default function DashboardScreen() {
         </Pressable>
       </View>
 
+      {locError && (
+        <Text style={styles.locErrorText}>{locError}</Text>
+      )}
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={!!weatherLoading && fetchEnabled}
-            onRefresh={() => { refetch(); refetchAlerts(); }}
+            onRefresh={() => { refetch(); refetchAlerts(); refetchRain(); }}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
@@ -282,6 +483,14 @@ export default function DashboardScreen() {
                 </Text>
               </View>
             </View>
+
+            {/* ML Rain Prediction — uses device GPS location */}
+            {rainData && (
+              <>
+                <Text style={styles.sectionLabel}>RAIN PREDICTION (2H)</Text>
+                <RainPredictionCard data={rainData} />
+              </>
+            )}
 
             <Text style={styles.sectionLabel}>FARMING TIP</Text>
             {farmingTip && (
