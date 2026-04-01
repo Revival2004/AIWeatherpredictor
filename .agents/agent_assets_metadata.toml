@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "Y2MQXxJfLyzTvqFqQtfhd"
+uri = "file://artifacts/weather-mobile/assets/images/icon.png"
+type = "image"
+title = "microclimate leaf weather icon"

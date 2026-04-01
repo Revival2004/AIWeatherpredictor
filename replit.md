@@ -22,7 +22,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
 │   ├── api-server/         # Express API server
-│   └── weather-app/        # React + Vite frontend (Microclimate AI Weather Predictor)
+│   ├── weather-app/        # React + Vite frontend (Microclimate AI Weather Predictor)
+│   └── weather-mobile/     # Expo mobile app (Android/iOS, leaf green + soil brown theme)
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
@@ -101,7 +102,15 @@ Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` 
 
 ### `artifacts/weather-app` (`@workspace/weather-app`)
 
-React + Vite frontend for the weather predictor.
+React + Vite frontend for the weather predictor. Atmospheric blue/teal design.
+
+### `artifacts/weather-mobile` (`@workspace/weather-mobile`)
+
+Expo mobile app for Android/iOS. Leaf green (#3D8B37) and soil brown (#8B5A2B) color scheme on a warm parchment background (#F5F0E8). Three tabs:
+- **Dashboard** — geolocation fetch, hero weather card, farming tip, condition cards
+- **History** — paginated list of past readings with WMO condition icons  
+- **Analytics** — average stats tiles + prediction breakdown bars
+Connects to the shared API via `@workspace/api-client-react` hooks. Sets `setBaseUrl` from `EXPO_PUBLIC_DOMAIN` in `_layout.tsx`.
 
 ### `lib/db` (`@workspace/db`)
 
