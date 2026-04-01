@@ -65,15 +65,17 @@ A full-stack AI-powered microclimate weather prediction system.
 - Rule-based: humidity+pressure thresholds, precipitation codes, wind speed
 - Model version progresses: "rules" → "rules+patterns" → "pattern-learned"
 
-**Multi-Model Ensemble** (`mlService.ts`) — three independent models, soft-voted:
-1. **Logistic Regression** — linear boundary via gradient descent (600 epochs)
-2. **Random Forest** — 30 bagged decision trees, sqrt(features) random subset per split, max depth 5
-3. **Gradient Boosting** — 60 sequential regression trees on pseudo-residuals, lr=0.08, max depth 4
+**Python scikit-learn Ensemble** — Flask microservice (`artifacts/api-server/ml/app.py`) on port 5000:
+1. **Logistic Regression** — Pipeline(StandardScaler + LogisticRegression, C=1.0, max_iter=1000)
+2. **Random Forest** — 100 trees, sqrt features, max_depth 8, n_jobs=-1
+3. **Gradient Boosting** — 100 trees, lr=0.08, max_depth 4
 - Prediction: average probability from all three (soft voting)
 - Features: temperature, humidity, pressure, windspeed, is_raining_now, hour_sin/cos, month_sin/cos
-- Binary target: will it rain in the next 2 hours?
-- Model and per-algorithm accuracy saved to `ml_model.json`
-- Falls back to heuristic rules if no model is trained yet
+- Binary target: will it rain in the next 2 hours? (labeled via 30-180 min observation self-join)
+- Model saved as `ml_model_sklearn.pkl`; metadata sidecar `ml_model_meta.json` for fast reads
+- Requires ≥3 labeled pairs AND both rain/no-rain classes to train
+- Falls back to heuristic rules if Python service is unreachable or model not yet trained
+- `mlService.ts` is a thin HTTP client — all ML computation is in Python
 
 ### Database Schema
 Tables:

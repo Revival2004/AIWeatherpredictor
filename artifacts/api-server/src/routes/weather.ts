@@ -390,7 +390,7 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
     return;
   }
 
-  const prediction = predictRain(
+  const prediction = await predictRain(
     weatherData.temperature,
     weatherData.humidity,
     weatherData.pressure,
