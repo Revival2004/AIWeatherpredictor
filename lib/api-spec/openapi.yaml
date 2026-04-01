@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Microclimate AI Weather Predictor API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: weather
+    description: Weather prediction operations
 paths:
   /healthz:
     get:
@@ -24,6 +25,96 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /weather:
+    get:
+      operationId: getWeather
+      tags: [weather]
+      summary: Get weather prediction
+      description: Fetches real-time weather data, runs AI prediction, and stores the result
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Latitude
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+          description: Longitude
+      responses:
+        "200":
+          description: Weather data with AI prediction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeatherPredictionResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /weather/history:
+    get:
+      operationId: getWeatherHistory
+      tags: [weather]
+      summary: Get weather history
+      description: Returns historical weather readings stored in the database
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+          description: Number of records to return
+        - name: lat
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Filter by latitude (approximate)
+        - name: lon
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Filter by longitude (approximate)
+      responses:
+        "200":
+          description: List of historical weather readings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WeatherRecord"
+
+  /weather/stats:
+    get:
+      operationId: getWeatherStats
+      tags: [weather]
+      summary: Get weather statistics
+      description: Returns aggregated statistics about collected weather data
+      responses:
+        "200":
+          description: Weather statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeatherStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +125,156 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    WeatherData:
+      type: object
+      properties:
+        temperature:
+          type: number
+          description: Temperature in Celsius
+        windspeed:
+          type: number
+          description: Wind speed in km/h
+        humidity:
+          type: number
+          description: Relative humidity percentage
+        pressure:
+          type: number
+          description: Surface pressure in hPa
+        weathercode:
+          type: integer
+          description: WMO weather code
+        time:
+          type: string
+          description: Observation time
+      required:
+        - temperature
+        - windspeed
+        - humidity
+        - pressure
+        - weathercode
+        - time
+
+    AIPrediction:
+      type: object
+      properties:
+        prediction:
+          type: string
+          description: Human-readable weather prediction
+        confidence:
+          type: number
+          description: Confidence score between 0 and 1
+        reasoning:
+          type: string
+          description: Explanation of the prediction logic
+      required:
+        - prediction
+        - confidence
+        - reasoning
+
+    WeatherPredictionResponse:
+      type: object
+      properties:
+        weather:
+          $ref: "#/components/schemas/WeatherData"
+        prediction:
+          $ref: "#/components/schemas/AIPrediction"
+        location:
+          type: object
+          properties:
+            lat:
+              type: number
+            lon:
+              type: number
+          required:
+            - lat
+            - lon
+        recordId:
+          type: integer
+          description: Database ID of the stored record
+      required:
+        - weather
+        - prediction
+        - location
+        - recordId
+
+    WeatherRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        latitude:
+          type: number
+        longitude:
+          type: number
+        temperature:
+          type: number
+        windspeed:
+          type: number
+        humidity:
+          type: number
+        pressure:
+          type: number
+        weathercode:
+          type: integer
+        prediction:
+          type: string
+        confidence:
+          type: number
+        reasoning:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - latitude
+        - longitude
+        - temperature
+        - windspeed
+        - humidity
+        - pressure
+        - weathercode
+        - prediction
+        - confidence
+        - reasoning
+        - createdAt
+
+    WeatherStats:
+      type: object
+      properties:
+        totalReadings:
+          type: integer
+          description: Total number of weather readings stored
+        avgTemperature:
+          type: ["number", "null"]
+          description: Average temperature across all readings
+        avgWindspeed:
+          type: ["number", "null"]
+          description: Average wind speed across all readings
+        avgHumidity:
+          type: ["number", "null"]
+          description: Average humidity across all readings
+        predictionBreakdown:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count of each prediction type
+        lastReading:
+          type: ["string", "null"]
+          format: date-time
+          description: Timestamp of the most recent reading
+      required:
+        - totalReadings
+        - avgTemperature
+        - avgWindspeed
+        - avgHumidity
+        - predictionBreakdown
+        - lastReading
