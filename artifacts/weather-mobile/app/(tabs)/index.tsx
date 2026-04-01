@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import React, { useState } from "react";
+import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import {
   Platform,
   Pressable,
@@ -214,6 +215,8 @@ export default function DashboardScreen() {
   const [fetchEnabled, setFetchEnabled] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationLabel, setLocationLabel] = useState<string | null>(null);
 
   const {
     data: weatherData,
@@ -406,20 +409,44 @@ export default function DashboardScreen() {
       <View style={styles.header}>
         <View style={styles.titleBlock}>
           <Text style={styles.title}>Microclimate</Text>
-          <Text style={styles.subtitle}>AI Weather Predictor</Text>
+          <Text style={styles.subtitle}>
+            {locationLabel ? locationLabel : "AI Weather Predictor"}
+          </Text>
         </View>
-        <Pressable
-          style={styles.locateBtn}
-          onPress={handleLocate}
-          testID="locate-btn"
-        >
-          <Feather
-            name={geoLoading ? "loader" : "map-pin"}
-            size={20}
-            color={colors.primaryForeground}
-          />
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          <Pressable
+            style={[styles.locateBtn, { backgroundColor: `${colors.primary}22`, borderRadius: 12, width: 40, height: 40, justifyContent: "center", alignItems: "center" }]}
+            onPress={() => setShowLocationPicker(true)}
+            testID="search-location-btn"
+          >
+            <Feather name="search" size={18} color={colors.primary} />
+          </Pressable>
+          <Pressable
+            style={styles.locateBtn}
+            onPress={handleLocate}
+            testID="locate-btn"
+          >
+            <Feather
+              name={geoLoading ? "loader" : "map-pin"}
+              size={20}
+              color={colors.primaryForeground}
+            />
+          </Pressable>
+        </View>
       </View>
+
+      {/* Kenya Location Picker */}
+      <KenyaLocationPicker
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelect={(loc: PickedLocation) => {
+          setCoords({ latitude: loc.lat, longitude: loc.lon });
+          setFetchEnabled(true);
+          setLocError(null);
+          setLocationLabel(loc.displayName);
+          setShowLocationPicker(false);
+        }}
+      />
 
       {locError && (
         <Text style={styles.locErrorText}>{locError}</Text>

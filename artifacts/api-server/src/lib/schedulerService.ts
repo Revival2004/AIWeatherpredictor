@@ -126,16 +126,18 @@ export async function collectAllLocations(logger?: Logger): Promise<CollectionRe
       );
 
       const targetTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
-      await db.insert(weatherPredictionsTable).values({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        predictedAt: new Date(),
-        targetTime,
-        predictionType: "rain_2h",
-        predictionValue: rainPrediction.predictionValue,
-        confidence: rainPrediction.confidence,
-        modelVersion: rainPrediction.modelVersion,
-      });
+      if (rainPrediction.predictionValue !== null && rainPrediction.predictionValue !== undefined) {
+        await db.insert(weatherPredictionsTable).values({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          predictedAt: new Date(),
+          targetTime,
+          predictionType: "rain_2h",
+          predictionValue: rainPrediction.predictionValue,
+          confidence: rainPrediction.confidence,
+          modelVersion: rainPrediction.modelVersion,
+        });
+      }
 
       results.push({ location: location.name, lat: location.latitude, lon: location.longitude, success: true });
 

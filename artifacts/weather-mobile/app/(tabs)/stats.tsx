@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -38,9 +39,9 @@ export default function StatsScreen() {
   const queryClient = useQueryClient();
 
   const [showAddLocation, setShowAddLocation] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newLat, setNewLat] = useState("");
-  const [newLon, setNewLon] = useState("");
+  const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(null);
 
   const { data: statsData, isLoading: statsLoading, refetch: refetchStats, isRefetching: statsRefetching } =
     useGetWeatherStats({ query: { staleTime: 2 * 60 * 1000 } });
@@ -57,8 +58,7 @@ export default function StatsScreen() {
         queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
         setShowAddLocation(false);
         setNewName("");
-        setNewLat("");
-        setNewLon("");
+        setPickedLocation(null);
       },
     },
   });
@@ -102,13 +102,18 @@ export default function StatsScreen() {
   });
 
   function handleAddLocation() {
-    const lat = parseFloat(newLat);
-    const lon = parseFloat(newLon);
-    if (!newName.trim() || isNaN(lat) || isNaN(lon)) {
-      Alert.alert("Invalid input", "Please enter a name, latitude (−90 to 90), and longitude (−180 to 180).");
+    if (!pickedLocation) {
+      Alert.alert("No location selected", "Please pick a location from the Kenya location browser.");
       return;
     }
-    addLocationMutation.mutate({ data: { name: newName.trim(), latitude: lat, longitude: lon } });
+    const lat = pickedLocation.lat;
+    const lon = pickedLocation.lon;
+    const name = newName.trim() || pickedLocation.name;
+    if (!name) {
+      Alert.alert("No name", "Please enter a name for this location.");
+      return;
+    }
+    addLocationMutation.mutate({ data: { name, latitude: lat, longitude: lon } });
   }
 
   function confirmDelete(id: number, name: string) {
@@ -484,40 +489,63 @@ export default function StatsScreen() {
         {showAddLocation && (
           <View style={[styles.addForm, { marginBottom: 12 }]}>
             <Text style={styles.addFormTitle}>Add tracked location</Text>
+
+            {/* Kenya Location Picker button */}
+            <TouchableOpacity
+              style={[styles.input, {
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingHorizontal: 12,
+              }]}
+              onPress={() => setShowLocationPicker(true)}
+            >
+              <Text style={{
+                flex: 1,
+                fontFamily: "Inter_400Regular",
+                fontSize: 14,
+                color: pickedLocation ? colors.foreground : colors.mutedForeground,
+              }}>
+                {pickedLocation ? pickedLocation.displayName : "Browse Kenya counties, towns & wards…"}
+              </Text>
+              <Feather name="map-pin" size={14} color={colors.primary} />
+            </TouchableOpacity>
+
+            {/* Optional custom name */}
             <TextInput
               style={styles.input}
-              placeholder="Location name (e.g. North Field)"
+              placeholder={pickedLocation ? `Custom name (default: ${pickedLocation.town})` : "Custom name (optional)"}
               placeholderTextColor={colors.mutedForeground}
               value={newName}
               onChangeText={setNewName}
             />
-            <View style={styles.inputRow}>
-              <View style={styles.inputHalf}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Latitude"
-                  placeholderTextColor={colors.mutedForeground}
-                  value={newLat}
-                  onChangeText={setNewLat}
-                  keyboardType="numeric"
-                />
+
+            {/* Show coordinates once picked */}
+            {pickedLocation && (
+              <View style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: 8,
+                paddingHorizontal: 4,
+              }}>
+                <Feather name="crosshair" size={12} color={colors.mutedForeground} />
+                <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                  {pickedLocation.lat.toFixed(4)}, {pickedLocation.lon.toFixed(4)}
+                </Text>
+                <TouchableOpacity onPress={() => setPickedLocation(null)} style={{ marginLeft: "auto" }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.destructive ?? "#e53e3e" }}>
+                    Clear
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.inputHalf}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Longitude"
-                  placeholderTextColor={colors.mutedForeground}
-                  value={newLon}
-                  onChangeText={setNewLon}
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
+            )}
+
             <View style={styles.addFormBtns}>
               <TouchableOpacity
-                style={styles.addBtn}
+                style={[styles.addBtn, !pickedLocation && { opacity: 0.5 }]}
                 onPress={handleAddLocation}
-                disabled={addLocationMutation.isPending}
+                disabled={addLocationMutation.isPending || !pickedLocation}
               >
                 {addLocationMutation.isPending ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -525,12 +553,26 @@ export default function StatsScreen() {
                   <Text style={styles.addBtnText}>Add Location</Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddLocation(false)}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => {
+                setShowAddLocation(false);
+                setPickedLocation(null);
+                setNewName("");
+              }}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
+
+        {/* Kenya Location Picker Modal */}
+        <KenyaLocationPicker
+          visible={showLocationPicker}
+          onClose={() => setShowLocationPicker(false)}
+          onSelect={(loc) => {
+            setPickedLocation(loc);
+            setShowLocationPicker(false);
+          }}
+        />
 
         <View style={styles.card}>
           {locationsLoading ? (
