@@ -15,19 +15,29 @@ const LanguageContext = createContext<LanguageContextValue>({
 });
 
 const STORAGE_KEY = "microclimate_language_v1";
+const CYCLE: Language[] = ["en", "sw", "ki"];
+
+const LANG_LABELS: Record<Language, string> = {
+  en: "EN",
+  sw: "SW",
+  ki: "KI",
+};
+
+export { LANG_LABELS };
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguage] = useState<Language>("en");
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((val) => {
-      if (val === "sw" || val === "en") setLanguage(val);
+      if (val === "sw" || val === "en" || val === "ki") setLanguage(val);
     });
   }, []);
 
   const toggle = useCallback(() => {
     setLanguage((prev) => {
-      const next = prev === "en" ? "sw" : "en";
+      const idx = CYCLE.indexOf(prev);
+      const next = CYCLE[(idx + 1) % CYCLE.length];
       AsyncStorage.setItem(STORAGE_KEY, next);
       return next;
     });

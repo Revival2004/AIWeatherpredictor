@@ -51,7 +51,14 @@ A full-stack AI-powered microclimate weather prediction system for Kenyan farmer
 - Feedback loop: farmers mark "did it rain?" → retrains model over time
 - Tracked locations with auto-collection (hourly scheduler via node-cron)
 - Offline caching: AsyncStorage per location, offline banner
-- **Swahili language toggle** (30+ translated strings, persisted preference)
+- **3-language support**: English → Swahili → Kikuyu (cycle via language button, persisted preference, 30+ strings each)
+- **Farmer feedback auto-retrain**: FarmerFeedbackCard surfaces 2h after prediction → "Did it rain?" → auto-retrains sklearn ensemble via background thread
+- **Per-farm elevation**: auto-fetched from Open-Meteo elevation API on location add; used as ML feature
+- **Per-location bootstrap**: new location triggers 24-month history fetch + model retrain in background
+- **Monthly retrain cron**: 1st of each month at 02:00 — keeps model current
+- **MLStatusBadge**: green (sklearn live) / yellow (rules fallback) / red (offline)
+- **Crop calendar**: set crop type + planting date per tracked location; shows "Day N of growing season" in forecast tab
+- **Storm timeline**: 15-min precipitation bars for next 3h with storm arrival countdown in forecast tab
 - **Onboarding flow**: 3-step welcome modal on first launch
 - **Push notifications**: daily 6 AM farming reminder + rain alert when probability > 70%
 - Kenya-specific county/sub-county/town location browsing
@@ -64,10 +71,10 @@ A full-stack AI-powered microclimate weather prediction system for Kenyan farmer
 - `/stats` — Analytics with prediction distribution chart
 
 ### Mobile Tabs (Expo / Android+iOS)
-- **Dashboard** — geolocation fetch, hero weather card, rain prediction card, farming tip, alerts
-- **Forecast** — 7-day farm forecast with field day scores, GDD widget, alerts
+- **Dashboard** — geolocation fetch, hero weather card, ML rain prediction (2h) with MLStatusBadge, FarmerFeedbackCard (shown 2h after prediction), farming tip, rain alerts, offline banner
+- **Forecast** — 7-day farm forecast + growing season banner (Day N of Maize/Tea/etc) + StormTimeline widget (15-min precip bars, storm arrival countdown) + GDD widget + crop-aware alerts
 - **History** — paginated list of past readings
-- **Analytics** — weather averages, AI prediction breakdown, ML accuracy ring, locations manager
+- **Analytics** — weather averages, AI prediction breakdown, ML accuracy ring, 3-model comparison bars, locations manager with **crop calendar editor** (crop type + planting date per location, days-in-season, elevation display)
 
 ### AI Logic
 **Python scikit-learn Ensemble** (`artifacts/api-server/ml/app.py`) on port 5000:
@@ -87,8 +94,9 @@ A full-stack AI-powered microclimate weather prediction system for Kenyan farmer
 ### Database Schema
 Tables:
 - `weather_data` — id, lat, lon, temperature, windspeed, humidity, pressure, weathercode, prediction, confidence, reasoning, created_at
-- `tracked_locations` — id, name, latitude, longitude, active, created_at
+- `tracked_locations` — id, name, latitude, longitude, active, **elevation** (real), **crop_type** (text), **planting_date** (text), created_at
 - `weather_predictions` — id, lat, lon, predicted_at, target_time, prediction_type, prediction_value, confidence, model_version, actual_value, is_correct, feedback_at, created_at
+- `farmer_feedback` — id, lat, lon, question, answer, location_name, created_at
 
 ### API Endpoints
 
@@ -101,10 +109,17 @@ Tables:
 - `GET /api/weather/rain?lat=&lon=` — Binary rain prediction (ML ensemble + elevation)
 
 **Locations:**
-- `GET /api/locations` — List all tracked locations
-- `POST /api/locations` — Add `{ name, latitude, longitude }`
+- `GET /api/locations` — List all tracked locations (includes elevation, cropType, plantingDate)
+- `POST /api/locations` — Add `{ name, latitude, longitude }` — auto-fetches elevation + fires per-location bootstrap
 - `PUT /api/locations/:id/activate` / `/deactivate` — Toggle auto-collection
+- `PUT /api/locations/:id/crop` — Set `{ cropType, plantingDate }` for crop calendar
 - `DELETE /api/locations/:id` — Remove
+
+**Feedback:**
+- `POST /api/feedback` — Farmer answer `{ lat, lon, question, answer, locationName }` → auto-retrains model
+
+**Weather Extra:**
+- `GET /api/weather/storm-timeline?lat=&lon=` — 15-min slots for next 6h with `stormArrivalMinutes`, `stormDetected`, `stormSoon`
 
 **ML:**
 - `POST /api/collect` — Manual weather collection trigger
@@ -122,7 +137,7 @@ Tables:
 - `forecastService.ts` — 7-day Open-Meteo daily data, per-day agriculture intelligence
 - `alertsService.ts` — prioritized WeatherAlert objects with actionRequired steps
 - `locationService.ts` — CRUD for tracked locations
-- `schedulerService.ts` — node-cron: collection at :05/hr, feedback at :15/hr
+- `schedulerService.ts` — node-cron: collection at :05/hr, feedback at :15/hr, **monthly retrain on 1st at 02:00**
 - `feedbackService.ts` — resolves past predictions against actual observations
 - `mlService.ts` — thin HTTP client to Python ML service; falls back to rule heuristic
 

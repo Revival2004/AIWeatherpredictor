@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
-import { useGetWeatherForecast, useGetWeatherAlerts } from "@workspace/api-client-react";
+import { useGetWeatherForecast, useGetWeatherAlerts, useGetLocations } from "@workspace/api-client-react";
 import { useColorScheme } from "react-native";
 import { useColors as useColorTokens } from "@/hooks/useColors";
 import colorTokens from "@/constants/colors";
@@ -19,6 +19,7 @@ import ForecastDayCard from "@/components/ForecastDayCard";
 import AlertsBanner from "@/components/AlertsBanner";
 import GDDWidget from "@/components/GDDWidget";
 import CropSelector from "@/components/CropSelector";
+import StormTimelineWidget from "@/components/StormTimelineWidget";
 
 const CROP_KEY = "selectedCrop";
 const LOC_KEY = "cachedLocation";
@@ -92,6 +93,24 @@ export default function ForecastScreen() {
       { query: { enabled: !!coords } }
     );
 
+  const { data: locationsData } = useGetLocations({ query: { staleTime: 5 * 60 * 1000 } });
+
+  // Find the tracked location nearest to current coords that has a crop set
+  const growingSeasonInfo = React.useMemo(() => {
+    if (!locationsData || !coords) return null;
+    const locs = (locationsData.locations as any[]).filter((l) => l.cropType && l.plantingDate);
+    if (locs.length === 0) return null;
+    const nearest = locs.reduce((best: any, l: any) => {
+      const d = Math.abs(l.latitude - coords.lat) + Math.abs(l.longitude - coords.lon);
+      const bd = Math.abs(best.latitude - coords.lat) + Math.abs(best.longitude - coords.lon);
+      return d < bd ? l : best;
+    });
+    const planted = new Date(nearest.plantingDate);
+    const dayN = Math.floor((Date.now() - planted.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (dayN < 1) return null;
+    return { cropType: nearest.cropType as string, dayN, locationName: nearest.name as string };
+  }, [locationsData, coords]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([refetchForecast(), refetchAlerts()]);
@@ -139,6 +158,35 @@ export default function ForecastScreen() {
             {/* Alerts */}
             {alertsData && alertsData.alerts.length > 0 && (
               <AlertsBanner alerts={alertsData.alerts} />
+            )}
+
+            {/* Growing season context banner */}
+            {growingSeasonInfo && (
+              <View style={{
+                marginHorizontal: 16,
+                marginTop: 8,
+                padding: 12,
+                borderRadius: 14,
+                backgroundColor: "#E8F5E9",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+              }}>
+                <Text style={{ fontSize: 20 }}>🌱</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#1B5E20" }}>
+                    {growingSeasonInfo.cropType} — Day {growingSeasonInfo.dayN} of growing season
+                  </Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "#388E3C", marginTop: 1 }}>
+                    {growingSeasonInfo.locationName}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Storm Arrival Timeline */}
+            {coords && (
+              <StormTimelineWidget lat={coords.lat} lon={coords.lon} />
             )}
 
             {/* GDD Widget */}

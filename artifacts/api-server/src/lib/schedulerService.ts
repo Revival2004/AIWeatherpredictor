@@ -10,14 +10,13 @@
 
 import cron from "node-cron";
 import type { Logger } from "pino";
-import { db, weatherPredictionsTable } from "@workspace/db";
+import { db, weatherPredictionsTable, weatherDataTable } from "@workspace/db";
 import { fetchWeather } from "./weatherService.js";
 import { predictWithHistory } from "./aiService.js";
-import { predictRain } from "./mlService.js";
+import { predictRain, trainModel } from "./mlService.js";
 import { runFeedbackLoop } from "./feedbackService.js";
 import { getActiveLocations } from "./locationService.js";
-import { desc, eq } from "drizzle-orm";
-import { weatherDataTable } from "@workspace/db";
+import { desc } from "drizzle-orm";
 
 let schedulerStarted = false;
 
@@ -47,7 +46,19 @@ export function startScheduler(logger: Logger): void {
     }
   });
 
-  logger.info("Scheduler started — weather collection every hour at :05, feedback at :15");
+  // Monthly auto-retrain: 1st of each month at 2:00 AM
+  // Refreshes the model with the latest 24 months of Open-Meteo data so it never goes stale
+  cron.schedule("0 2 1 * *", async () => {
+    logger.info("Monthly scheduled retrain starting");
+    try {
+      const result = await trainModel(logger);
+      logger.info({ accuracy: result.accuracy, samples: result.trainingSamples }, "Monthly retrain completed");
+    } catch (err) {
+      logger.error({ err }, "Monthly retrain failed");
+    }
+  });
+
+  logger.info("Scheduler started — weather collection every hour at :05, feedback at :15, monthly retrain on 1st at 02:00");
 }
 
 export interface CollectionResult {

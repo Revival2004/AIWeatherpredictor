@@ -7,7 +7,9 @@ import { sendRainAlert } from "@/services/NotificationService";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import OnboardingModal from "@/components/OnboardingModal";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { useLanguage, LANG_LABELS } from "@/contexts/LanguageContext";
+import FarmerFeedbackCard, { FEEDBACK_PENDING_KEY, type PendingFeedback } from "@/components/FarmerFeedbackCard";
+import MLStatusBadge from "@/components/MLStatusBadge";
 import {
   Platform,
   Pressable,
@@ -221,7 +223,7 @@ const CACHE_KEY_PREFIX = "weather_cache_v1_";
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { t, toggle } = useLanguage();
+  const { t, toggle, language } = useLanguage();
   const [coords, setCoords] = useState<Coords | null>(null);
   const [fetchEnabled, setFetchEnabled] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -231,6 +233,7 @@ export default function DashboardScreen() {
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [feedbackPending, setFeedbackPending] = useState<PendingFeedback | null>(null);
 
   const {
     data: weatherData,
@@ -343,6 +346,33 @@ export default function DashboardScreen() {
       sendRainAlert(prob, name).catch(() => {});
     }
   }, [rainData, locationLabel]);
+
+  // Farmer feedback — store pending when rain prediction arrives; surface 2h later
+  useEffect(() => {
+    if (!rainData || !coords) return;
+    const name = locationLabel ?? "My Farm";
+    const pending: PendingFeedback = {
+      lat: coords.latitude,
+      lon: coords.longitude,
+      locationName: name,
+      predictedAt: Date.now(),
+    };
+    AsyncStorage.setItem(FEEDBACK_PENDING_KEY, JSON.stringify(pending)).catch(() => {});
+  }, [rainData]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(FEEDBACK_PENDING_KEY).then((raw) => {
+      if (!raw) return;
+      try {
+        const p: PendingFeedback = JSON.parse(raw);
+        const ageMs = Date.now() - p.predictedAt;
+        const TWO_HOURS = 2 * 60 * 60 * 1000;
+        if (ageMs >= TWO_HOURS) {
+          setFeedbackPending(p);
+        }
+      } catch {}
+    });
+  }, []);
 
   const isLoading = geoLoading || weatherLoading;
 
@@ -470,7 +500,7 @@ export default function DashboardScreen() {
             testID="language-toggle-btn"
           >
             <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary }}>
-              {t("language") === "English" ? "EN" : "SW"}
+              {LANG_LABELS[language]}
             </Text>
           </Pressable>
           <Pressable
@@ -605,8 +635,28 @@ export default function DashboardScreen() {
             {/* ML Rain Prediction — uses device GPS location */}
             {rainData && (
               <>
-                <Text style={styles.sectionLabel}>RAIN PREDICTION (2H)</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 20, marginTop: 20, marginBottom: 8 }}>
+                  <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, letterSpacing: 0.8 }}>
+                    RAIN PREDICTION (2H)
+                  </Text>
+                  <MLStatusBadge
+                    modelVersion={rainData.modelVersion}
+                    accuracy={rainData.modelVersion?.includes("acc") ? parseFloat(rainData.modelVersion.split("acc")[1] ?? "0") : undefined}
+                    isOffline={isOffline}
+                  />
+                </View>
                 <RainPredictionCard data={rainData} />
+              </>
+            )}
+
+            {/* Farmer feedback — shown 2h after prediction */}
+            {feedbackPending && (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: 4 }]}>YOUR FEEDBACK</Text>
+                <FarmerFeedbackCard
+                  pending={feedbackPending}
+                  onDismiss={() => setFeedbackPending(null)}
+                />
               </>
             )}
 

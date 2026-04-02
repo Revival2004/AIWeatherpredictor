@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -13,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useLanguage } from "@/contexts/LanguageContext";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,11 +46,18 @@ export default function StatsScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
+  const { t } = useLanguage();
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [newName, setNewName] = useState("");
   const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(null);
+
+  // Crop calendar editing state
+  const [editingCropId, setEditingCropId] = useState<number | null>(null);
+  const [cropTypeInput, setCropTypeInput] = useState("");
+  const [plantingDateInput, setPlantingDateInput] = useState("");
+  const [savingCrop, setSavingCrop] = useState(false);
 
   const { data: statsData, isLoading: statsLoading, refetch: refetchStats, isRefetching: statsRefetching } =
     useGetWeatherStats({ query: { staleTime: 2 * 60 * 1000 } });
@@ -156,6 +165,40 @@ export default function StatsScreen() {
         onPress: () => deleteLocationMutation.mutate({ id }),
       },
     ]);
+  }
+
+  async function saveCrop(id: number) {
+    setSavingCrop(true);
+    try {
+      await fetch(`${getApiBase()}/api/locations/${id}/crop`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cropType: cropTypeInput || undefined,
+          plantingDate: plantingDateInput || undefined,
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+      setEditingCropId(null);
+    } catch {
+      Alert.alert("Error", "Could not save crop info.");
+    } finally {
+      setSavingCrop(false);
+    }
+  }
+
+  function startEditCrop(loc: { id: number; cropType: string | null; plantingDate: string | null }) {
+    setEditingCropId(loc.id);
+    setCropTypeInput(loc.cropType ?? "");
+    setPlantingDateInput(loc.plantingDate ?? "");
+  }
+
+  function daysInSeason(plantingDate: string | null): number | null {
+    if (!plantingDate) return null;
+    const planted = new Date(plantingDate);
+    const now = new Date();
+    const diff = Math.floor((now.getTime() - planted.getTime()) / (1000 * 60 * 60 * 24));
+    return diff >= 0 ? diff + 1 : null;
   }
 
   function refetchAll() {
@@ -703,49 +746,164 @@ export default function StatsScreen() {
               No tracked locations yet. Add one above to enable automatic hourly collection.
             </Text>
           ) : (
-            locations.map((loc, idx) => {
+            (locations as any[]).map((loc, idx) => {
               const isLast = idx === locations.length - 1;
+              const days = daysInSeason(loc.plantingDate ?? null);
+              const isEditing = editingCropId === loc.id;
               return (
                 <View key={loc.id} style={isLast ? styles.locationItemLast : styles.locationItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.locationName}>{loc.name}</Text>
-                    <Text style={styles.locationCoords}>
-                      {loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}
-                    </Text>
-                  </View>
-                  <View style={styles.locationActions}>
-                    <View
-                      style={[
-                        styles.locationBadge,
-                        { backgroundColor: loc.active ? "#E8F5E9" : colors.muted },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.locationBadgeText,
-                          { color: loc.active ? "#3D8B37" : colors.mutedForeground },
-                        ]}
-                      >
-                        {loc.active ? "ACTIVE" : "PAUSED"}
+                  {/* Top row: name + actions */}
+                  <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.locationName}>{loc.name}</Text>
+                      <Text style={styles.locationCoords}>
+                        {loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}
+                        {loc.elevation != null ? `  ·  ${Math.round(loc.elevation)}m` : ""}
                       </Text>
                     </View>
-                    <TouchableOpacity
-                      onPress={() =>
-                        loc.active
-                          ? deactivateMutation.mutate({ id: loc.id })
-                          : activateMutation.mutate({ id: loc.id })
-                      }
-                    >
-                      <Feather
-                        name={loc.active ? "pause-circle" : "play-circle"}
-                        size={20}
-                        color={loc.active ? colors.mutedForeground : colors.primary}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => confirmDelete(loc.id, loc.name)}>
-                      <Feather name="trash-2" size={18} color="#D94F4F" />
-                    </TouchableOpacity>
+                    <View style={styles.locationActions}>
+                      <View
+                        style={[
+                          styles.locationBadge,
+                          { backgroundColor: loc.active ? "#E8F5E9" : colors.muted },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.locationBadgeText,
+                            { color: loc.active ? "#3D8B37" : colors.mutedForeground },
+                          ]}
+                        >
+                          {loc.active ? "ACTIVE" : "PAUSED"}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() =>
+                          loc.active
+                            ? deactivateMutation.mutate({ id: loc.id })
+                            : activateMutation.mutate({ id: loc.id })
+                        }
+                      >
+                        <Feather
+                          name={loc.active ? "pause-circle" : "play-circle"}
+                          size={20}
+                          color={loc.active ? colors.mutedForeground : colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => confirmDelete(loc.id, loc.name)}>
+                        <Feather name="trash-2" size={18} color="#D94F4F" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
+
+                  {/* Crop calendar row */}
+                  {!isEditing ? (
+                    <TouchableOpacity
+                      onPress={() => startEditCrop({ id: loc.id, cropType: loc.cropType ?? null, plantingDate: loc.plantingDate ?? null })}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginTop: 8,
+                        paddingTop: 8,
+                        borderTopWidth: 1,
+                        borderColor: colors.border,
+                        gap: 8,
+                      }}
+                    >
+                      <Feather name="calendar" size={13} color={loc.cropType ? colors.primary : colors.mutedForeground} />
+                      <View style={{ flex: 1 }}>
+                        {loc.cropType ? (
+                          <>
+                            <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
+                              {loc.cropType}
+                              {days != null && (
+                                <Text style={{ color: "#3D8B37", fontFamily: "Inter_700Bold" }}>
+                                  {" "}· Day {days} of season
+                                </Text>
+                              )}
+                            </Text>
+                            {loc.plantingDate && (
+                              <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                                Planted {new Date(loc.plantingDate).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+                              </Text>
+                            )}
+                          </>
+                        ) : (
+                          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                            Tap to set crop & planting date
+                          </Text>
+                        )}
+                      </View>
+                      <Feather name="edit-2" size={12} color={colors.mutedForeground} />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: colors.border }}>
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, marginBottom: 8, letterSpacing: 0.6 }}>
+                        CROP CALENDAR
+                      </Text>
+                      {/* Crop type quick-pick */}
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                        {["Maize", "Tea", "Coffee", "Beans", "Potatoes", "Wheat", "Vegetables", "Pyrethrum"].map((crop) => (
+                          <TouchableOpacity
+                            key={crop}
+                            onPress={() => setCropTypeInput(crop)}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                              borderRadius: 20,
+                              borderWidth: 1,
+                              borderColor: cropTypeInput === crop ? colors.primary : colors.border,
+                              backgroundColor: cropTypeInput === crop ? `${colors.primary}18` : colors.background,
+                            }}
+                          >
+                            <Text style={{
+                              fontSize: 11,
+                              fontFamily: "Inter_500Medium",
+                              color: cropTypeInput === crop ? colors.primary : colors.foreground,
+                            }}>
+                              {crop}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {/* Custom crop name */}
+                      <TextInput
+                        style={[styles.input, { marginBottom: 8, fontSize: 13 }]}
+                        placeholder="Custom crop name…"
+                        placeholderTextColor={colors.mutedForeground}
+                        value={cropTypeInput}
+                        onChangeText={setCropTypeInput}
+                      />
+                      {/* Planting date */}
+                      <TextInput
+                        style={[styles.input, { marginBottom: 10, fontSize: 13 }]}
+                        placeholder="Planting date (YYYY-MM-DD)"
+                        placeholderTextColor={colors.mutedForeground}
+                        value={plantingDateInput}
+                        onChangeText={setPlantingDateInput}
+                        keyboardType="numeric"
+                      />
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <TouchableOpacity
+                          style={[styles.addBtn, { flex: 1 }]}
+                          onPress={() => saveCrop(loc.id)}
+                          disabled={savingCrop}
+                        >
+                          {savingCrop ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={styles.addBtnText}>Save Crop</Text>
+                          )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.cancelBtn, { flex: 1 }]}
+                          onPress={() => setEditingCropId(null)}
+                        >
+                          <Text style={styles.cancelBtnText}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
                 </View>
               );
             })

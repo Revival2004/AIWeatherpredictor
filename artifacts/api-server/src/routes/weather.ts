@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, weatherDataTable, weatherPredictionsTable } from "@workspace/db";
+import { db, weatherDataTable, weatherPredictionsTable, farmerFeedbackTable } from "@workspace/db";
 import { desc, eq, and, gte, lte, sql, count, avg } from "drizzle-orm";
 import { fetchWeather } from "../lib/weatherService.js";
 import { predictWithHistory, type HistoricalRecord } from "../lib/aiService.js";
@@ -464,6 +464,129 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
       weathercode: weatherData.weathercode,
     },
   });
+});
+
+/**
+ * POST /feedback
+ * Stores a farmer's ground-truth feedback (did it rain? was it cloudy?)
+ * then automatically retrains the ML model in the background.
+ * No manual "Train Model" button needed — the model improves after each response.
+ */
+router.post("/feedback", async (req, res): Promise<void> => {
+  const parsed = (await import("zod")).z
+    .object({
+      lat: (await import("zod")).z.number(),
+      lon: (await import("zod")).z.number(),
+      question: (await import("zod")).z.enum(["rain", "cloudy", "wind"]),
+      answer: (await import("zod")).z.enum(["yes", "no", "almost"]),
+      locationName: (await import("zod")).z.string().optional(),
+    })
+    .safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { lat, lon, question, answer, locationName } = parsed.data;
+
+  try {
+    await db.insert(farmerFeedbackTable).values({
+      latitude: lat,
+      longitude: lon,
+      question,
+      answer,
+      locationName: locationName ?? null,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to store farmer feedback");
+    res.status(500).json({ error: "Failed to store feedback." });
+    return;
+  }
+
+  // Auto-retrain in background — farmer doesn't wait for this
+  setImmediate(async () => {
+    try {
+      await trainModel(req.log);
+      req.log.info({ lat, lon, question, answer }, "Auto-retrained after farmer feedback");
+    } catch (err) {
+      req.log.warn({ err }, "Auto-retrain after feedback failed (non-fatal)");
+    }
+  });
+
+  res.json({ success: true, autoRetrained: true });
+});
+
+/**
+ * GET /weather/storm-timeline
+ * Returns a 6-hour 15-minute-interval precipitation timeline so the app can show
+ * "Storm arriving in ~2h 15min" instead of a single static forecast number.
+ */
+router.get("/weather/storm-timeline", async (req, res): Promise<void> => {
+  const parsed = (await import("zod")).z
+    .object({
+      lat: (await import("zod")).z.coerce.number(),
+      lon: (await import("zod")).z.coerce.number(),
+    })
+    .safeParse(req.query);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: "lat and lon are required" });
+    return;
+  }
+
+  const { lat, lon } = parsed.data;
+
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${lat}&longitude=${lon}` +
+      `&minutely_15=precipitation_probability,precipitation` +
+      `&forecast_days=1&timezone=auto`;
+
+    const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) throw new Error(`Open-Meteo ${r.status}`);
+
+    const raw = (await r.json()) as {
+      minutely_15?: {
+        time: string[];
+        precipitation_probability: number[];
+        precipitation: number[];
+      };
+    };
+
+    const m = raw.minutely_15;
+    if (!m || !m.time.length) {
+      res.json({ slots: [], stormArrivalMinutes: null, stormDetected: false });
+      return;
+    }
+
+    const now = Date.now();
+    const THRESHOLD = 40;
+    const slots = m.time
+      .map((t, i) => ({
+        time: t,
+        probability: m.precipitation_probability[i] ?? 0,
+        precipitation: m.precipitation[i] ?? 0,
+      }))
+      .filter((s) => new Date(s.time).getTime() >= now - 60_000)
+      .slice(0, 24); // next 6 hours
+
+    const firstRain = slots.find((s) => s.probability >= THRESHOLD);
+    const stormArrivalMinutes = firstRain
+      ? Math.round((new Date(firstRain.time).getTime() - now) / 60_000)
+      : null;
+
+    res.json({
+      slots,
+      stormArrivalMinutes,
+      stormDetected: stormArrivalMinutes !== null && stormArrivalMinutes >= 0,
+      stormSoon: stormArrivalMinutes !== null && stormArrivalMinutes <= 30,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Storm timeline fetch failed");
+    res.status(500).json({ error: "Failed to fetch storm timeline." });
+  }
 });
 
 export default router;
