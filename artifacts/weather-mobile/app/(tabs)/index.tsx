@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import React, { useState } from "react";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
+import MapLocationPicker from "@/components/MapLocationPicker";
 import {
   Platform,
   Pressable,
@@ -216,6 +217,7 @@ export default function DashboardScreen() {
   const [geoLoading, setGeoLoading] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
 
   const {
@@ -422,6 +424,13 @@ export default function DashboardScreen() {
             <Feather name="search" size={18} color={colors.primary} />
           </Pressable>
           <Pressable
+            style={[styles.locateBtn, { backgroundColor: `${colors.primary}22`, borderRadius: 12, width: 40, height: 40, justifyContent: "center", alignItems: "center" }]}
+            onPress={() => setShowMapPicker(true)}
+            testID="map-location-btn"
+          >
+            <Feather name="map" size={18} color={colors.primary} />
+          </Pressable>
+          <Pressable
             style={styles.locateBtn}
             onPress={handleLocate}
             testID="locate-btn"
@@ -435,7 +444,7 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* Kenya Location Picker */}
+      {/* Kenya Location Picker (browse/search by county) */}
       <KenyaLocationPicker
         visible={showLocationPicker}
         onClose={() => setShowLocationPicker(false)}
@@ -445,6 +454,18 @@ export default function DashboardScreen() {
           setLocError(null);
           setLocationLabel(loc.displayName);
           setShowLocationPicker(false);
+        }}
+      />
+
+      {/* Map Location Picker (tap-to-pin on OpenStreetMap) */}
+      <MapLocationPicker
+        visible={showMapPicker}
+        onClose={() => setShowMapPicker(false)}
+        onConfirm={(loc) => {
+          setCoords({ latitude: loc.latitude, longitude: loc.longitude });
+          setFetchEnabled(true);
+          setLocError(null);
+          setLocationLabel(loc.name);
         }}
       />
 

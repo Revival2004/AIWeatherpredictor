@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
+import MapLocationPicker from "@/components/MapLocationPicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -45,6 +46,7 @@ export default function StatsScreen() {
 
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [newName, setNewName] = useState("");
   const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(null);
 
@@ -573,26 +575,44 @@ export default function StatsScreen() {
           <View style={[styles.addForm, { marginBottom: 12 }]}>
             <Text style={styles.addFormTitle}>Add tracked location</Text>
 
-            {/* Kenya Location Picker button */}
-            <TouchableOpacity
-              style={[styles.input, {
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                paddingHorizontal: 12,
-              }]}
-              onPress={() => setShowLocationPicker(true)}
-            >
-              <Text style={{
-                flex: 1,
-                fontFamily: "Inter_400Regular",
-                fontSize: 14,
-                color: pickedLocation ? colors.foreground : colors.mutedForeground,
-              }}>
-                {pickedLocation ? pickedLocation.displayName : "Browse Kenya counties, towns & wards…"}
-              </Text>
-              <Feather name="map-pin" size={14} color={colors.primary} />
-            </TouchableOpacity>
+            {/* Location selection — two methods */}
+            {pickedLocation ? (
+              <TouchableOpacity
+                style={[styles.input, {
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingHorizontal: 12,
+                }]}
+                onPress={() => setShowLocationPicker(true)}
+              >
+                <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.foreground }}>
+                  {pickedLocation.displayName}
+                </Text>
+                <Feather name="edit-2" size={14} color={colors.primary} />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.input, { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }]}
+                  onPress={() => setShowLocationPicker(true)}
+                >
+                  <Feather name="list" size={14} color={colors.primary} />
+                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.primary }}>
+                    Browse by County
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.input, { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }]}
+                  onPress={() => setShowMapPicker(true)}
+                >
+                  <Feather name="map" size={14} color={colors.primary} />
+                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.primary }}>
+                    Pin on Map
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Optional custom name */}
             <TextInput
@@ -647,13 +667,31 @@ export default function StatsScreen() {
           </View>
         )}
 
-        {/* Kenya Location Picker Modal */}
+        {/* Kenya Location Picker Modal (browse by county) */}
         <KenyaLocationPicker
           visible={showLocationPicker}
           onClose={() => setShowLocationPicker(false)}
           onSelect={(loc) => {
             setPickedLocation(loc);
             setShowLocationPicker(false);
+          }}
+        />
+
+        {/* Map Location Picker Modal (tap-to-pin) */}
+        <MapLocationPicker
+          visible={showMapPicker}
+          onClose={() => setShowMapPicker(false)}
+          onConfirm={(loc) => {
+            const placeName = loc.name.split(",")[0].trim();
+            setPickedLocation({
+              lat: loc.latitude,
+              lon: loc.longitude,
+              name: loc.name,
+              displayName: loc.name,
+              town: placeName,
+              county: "",
+              subCounty: "",
+            });
           }}
         />
 
