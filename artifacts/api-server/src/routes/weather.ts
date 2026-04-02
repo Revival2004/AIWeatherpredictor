@@ -427,7 +427,11 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
     weatherData.humidity,
     weatherData.pressure,
     weatherData.windspeed,
-    weatherData.weathercode
+    weatherData.weathercode,
+    new Date(),
+    lat,
+    lon,
+    weatherData.elevation,
   );
 
   // Optionally store this prediction for the feedback loop

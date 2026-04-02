@@ -146,6 +146,7 @@ export async function predictRain(
   timestamp: Date = new Date(),
   lat?: number,
   lon?: number,
+  elevation?: number,
 ): Promise<MLPrediction> {
   const hour = timestamp.getHours();
   const month = timestamp.getMonth() + 1;
@@ -166,6 +167,7 @@ export async function predictRain(
         month,
         lat: lat ?? 0.0,
         lon: lon ?? 37.5,
+        elevation: elevation ?? 1000.0,
       }),
     });
   } catch {

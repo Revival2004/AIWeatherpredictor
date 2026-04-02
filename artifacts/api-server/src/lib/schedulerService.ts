@@ -117,7 +117,7 @@ export async function collectAllLocations(logger?: Logger): Promise<CollectionRe
         .returning({ id: weatherDataTable.id });
 
       // Make and store a rain prediction for +2 hours (for the feedback loop)
-      const rainPrediction = predictRain(
+      const rainPrediction = await predictRain(
         weatherData.temperature,
         weatherData.humidity,
         weatherData.pressure,
@@ -126,6 +126,7 @@ export async function collectAllLocations(logger?: Logger): Promise<CollectionRe
         new Date(),
         location.latitude,
         location.longitude,
+        weatherData.elevation ?? 1000,
       );
 
       const targetTime = new Date(Date.now() + 2 * 60 * 60 * 1000);

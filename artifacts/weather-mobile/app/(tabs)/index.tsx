@@ -2,7 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { sendRainAlert } from "@/services/NotificationService";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import OnboardingModal from "@/components/OnboardingModal";
@@ -330,6 +331,18 @@ export default function DashboardScreen() {
   useEffect(() => {
     if (weatherError && cachedData) setIsOffline(true);
   }, [weatherError, cachedData]);
+
+  // Rain alert notification — fires when fresh prediction crosses 70%
+  const lastAlertedProbRef = useRef<number>(0);
+  useEffect(() => {
+    if (!rainData) return;
+    const prob = rainData.probability;
+    if (prob >= 0.7 && prob !== lastAlertedProbRef.current) {
+      lastAlertedProbRef.current = prob;
+      const name = locationLabel ?? "your farm";
+      sendRainAlert(prob, name).catch(() => {});
+    }
+  }, [rainData, locationLabel]);
 
   const isLoading = geoLoading || weatherLoading;
 
