@@ -30,6 +30,9 @@ import {
   useGetWeather,
   useGetWeatherAlerts,
   useGetRainPrediction,
+  getGetWeatherQueryKey,
+  getGetWeatherAlertsQueryKey,
+  getGetRainPredictionQueryKey,
   type WeatherPredictionResponse,
   type RainPredictionResponse,
 } from "@workspace/api-client-react";
@@ -287,6 +290,7 @@ export default function DashboardScreen() {
     { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
     {
       query: {
+        queryKey: getGetWeatherQueryKey({ lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 }),
         enabled: fetchEnabled && coords !== null,
         staleTime: 5 * 60 * 1000,
       },
@@ -297,6 +301,7 @@ export default function DashboardScreen() {
     { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
     {
       query: {
+        queryKey: getGetWeatherAlertsQueryKey({ lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 }),
         enabled: fetchEnabled && coords !== null,
         staleTime: 10 * 60 * 1000,
       },
@@ -307,6 +312,7 @@ export default function DashboardScreen() {
     { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
     {
       query: {
+        queryKey: getGetRainPredictionQueryKey({ lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 }),
         enabled: fetchEnabled && coords !== null,
         staleTime: 5 * 60 * 1000,
       },

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useGetWeatherHistory } from "@workspace/api-client-react";
+import { useGetWeatherHistory, getGetWeatherHistoryQueryKey } from "@workspace/api-client-react";
 import { HistoryCard } from "@/components/HistoryCard";
 import { useColors } from "@/hooks/useColors";
 
@@ -25,7 +25,7 @@ export default function HistoryScreen() {
   const { data, isLoading, error, refetch, isRefetching } =
     useGetWeatherHistory(
       { limit },
-      { query: { staleTime: 60 * 1000 } }
+      { query: { queryKey: getGetWeatherHistoryQueryKey({ limit }), staleTime: 60 * 1000 } }
     );
 
   const styles = StyleSheet.create({

@@ -159,29 +159,22 @@ router.get("/weather/history", async (req, res): Promise<void> => {
 
   const { limit = 20, lat, lon } = parsed.data;
 
-  let query = db
-    .select()
-    .from(weatherDataTable)
-    .orderBy(desc(weatherDataTable.createdAt))
-    .limit(limit);
-
-  if (lat !== undefined && lon !== undefined) {
-    query = db
-      .select()
-      .from(weatherDataTable)
-      .where(
-        and(
-          gte(weatherDataTable.latitude, lat - 0.5),
-          lte(weatherDataTable.latitude, lat + 0.5),
-          gte(weatherDataTable.longitude, lon - 0.5),
-          lte(weatherDataTable.longitude, lon + 0.5)
+  const baseQuery = db.select().from(weatherDataTable);
+  const records = await (lat !== undefined && lon !== undefined
+    ? baseQuery
+        .where(
+          and(
+            gte(weatherDataTable.latitude, lat - 0.5),
+            lte(weatherDataTable.latitude, lat + 0.5),
+            gte(weatherDataTable.longitude, lon - 0.5),
+            lte(weatherDataTable.longitude, lon + 0.5)
+          )
         )
-      )
-      .orderBy(desc(weatherDataTable.createdAt))
-      .limit(limit);
-  }
-
-  const records = await query;
+        .orderBy(desc(weatherDataTable.createdAt))
+        .limit(limit)
+    : baseQuery
+        .orderBy(desc(weatherDataTable.createdAt))
+        .limit(limit));
 
   const response = GetWeatherHistoryResponse.parse(
     records.map((r) => ({

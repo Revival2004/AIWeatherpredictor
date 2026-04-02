@@ -31,6 +31,9 @@ import {
   useTrainModel,
   getGetLocationsQueryKey,
   getGetMetricsQueryKey,
+  getGetWeatherStatsQueryKey,
+  type CollectionResponse,
+  type TrainResponse,
 } from "@workspace/api-client-react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { StatsPanel } from "@/components/StatsPanel";
@@ -60,13 +63,13 @@ export default function StatsScreen() {
   const [savingCrop, setSavingCrop] = useState(false);
 
   const { data: statsData, isLoading: statsLoading, refetch: refetchStats, isRefetching: statsRefetching } =
-    useGetWeatherStats({ query: { staleTime: 2 * 60 * 1000 } });
+    useGetWeatherStats({ query: { queryKey: getGetWeatherStatsQueryKey(), staleTime: 2 * 60 * 1000 } });
 
   const { data: metricsData, isLoading: metricsLoading, refetch: refetchMetrics } =
-    useGetMetrics({ query: { staleTime: 60 * 1000 } });
+    useGetMetrics({ query: { queryKey: getGetMetricsQueryKey(), staleTime: 60 * 1000 } });
 
   const { data: locationsData, isLoading: locationsLoading, refetch: refetchLocations } =
-    useGetLocations({ query: { staleTime: 30 * 1000 } });
+    useGetLocations({ query: { queryKey: getGetLocationsQueryKey(), staleTime: 30 * 1000 } });
 
   const addLocationMutation = useAddLocation({
     mutation: {
@@ -99,7 +102,7 @@ export default function StatsScreen() {
 
   const collectMutation = useTriggerCollection({
     mutation: {
-      onSuccess: (data) => {
+      onSuccess: (data: CollectionResponse) => {
         queryClient.invalidateQueries({ queryKey: getGetMetricsQueryKey() });
         Alert.alert("Collection complete", `Collected ${data.collected} of ${data.total} locations.`);
       },
@@ -109,7 +112,7 @@ export default function StatsScreen() {
 
   const trainMutation = useTrainModel({
     mutation: {
-      onSuccess: (data) => {
+      onSuccess: (data: TrainResponse) => {
         queryClient.invalidateQueries({ queryKey: getGetMetricsQueryKey() });
         Alert.alert("Training complete", data.message ?? `Trained on ${data.trainingSamples} samples.`);
       },
@@ -209,7 +212,7 @@ export default function StatsScreen() {
 
   const isRefetching = statsRefetching || metricsLoading;
 
-  const predBreakdown = statsData?.predictionBreakdown ?? {};
+  const predBreakdown: Record<string, number> = statsData?.predictionBreakdown ?? {};
   const predEntries = Object.entries(predBreakdown).sort((a, b) => b[1] - a[1]);
   const accuracy = metricsData?.predictions?.accuracy;
   const model = metricsData?.model;

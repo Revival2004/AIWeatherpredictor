@@ -11,7 +11,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useGetWeatherForecast, useGetWeatherAlerts, useGetLocations } from "@workspace/api-client-react";
+import {
+  useGetWeatherForecast,
+  useGetWeatherAlerts,
+  useGetLocations,
+  getGetWeatherForecastQueryKey,
+  getGetWeatherAlertsQueryKey,
+  getGetLocationsQueryKey,
+  type DailyForecast,
+} from "@workspace/api-client-react";
 import { useColorScheme } from "react-native";
 import { useColors as useColorTokens } from "@/hooks/useColors";
 import colorTokens from "@/constants/colors";
@@ -64,19 +72,23 @@ export default function ForecastScreen() {
     setCoords(KENYA_DEFAULT);
   }, []);
 
+  const forecastParams = coords ? { lat: coords.lat, lon: coords.lon } : undefined;
+
   const { data: forecast, isLoading: forecastLoading, refetch: refetchForecast, error: forecastError } =
     useGetWeatherForecast(
-      coords ? { lat: coords.lat, lon: coords.lon } : ({} as any),
-      { query: { enabled: !!coords } }
+      forecastParams ?? ({ lat: 0, lon: 0 } as { lat: number; lon: number }),
+      { query: { queryKey: getGetWeatherForecastQueryKey(forecastParams), enabled: !!coords } }
     );
 
   const { data: alertsData, isLoading: alertsLoading, refetch: refetchAlerts } =
     useGetWeatherAlerts(
-      coords ? { lat: coords.lat, lon: coords.lon } : ({} as any),
-      { query: { enabled: !!coords } }
+      forecastParams ?? ({ lat: 0, lon: 0 } as { lat: number; lon: number }),
+      { query: { queryKey: getGetWeatherAlertsQueryKey(forecastParams), enabled: !!coords } }
     );
 
-  const { data: locationsData } = useGetLocations({ query: { staleTime: 5 * 60 * 1000 } });
+  const { data: locationsData } = useGetLocations({
+    query: { queryKey: getGetLocationsQueryKey(), staleTime: 5 * 60 * 1000 },
+  });
 
   // Find the tracked location nearest to current coords that has a crop set
   const growingSeasonInfo = React.useMemo(() => {
@@ -184,7 +196,7 @@ export default function ForecastScreen() {
             {/* 7-day cards */}
             <View style={styles.cardsSection}>
               <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>DAILY FORECAST</Text>
-              {forecast?.days.map((day, idx) => (
+              {forecast?.days.map((day: DailyForecast, idx: number) => (
                 <ForecastDayCard key={day.date} day={day} isToday={idx === 0} />
               ))}
             </View>
