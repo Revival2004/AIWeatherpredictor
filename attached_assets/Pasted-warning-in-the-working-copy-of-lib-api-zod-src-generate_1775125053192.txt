@@ -1,0 +1,36 @@
+warning: in the working copy of 'lib/api-zod/src/generated/types/metricsResponseModel.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/metricsResponsePredictions.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/rainPredictionResponse.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/rainPredictionResponseCurrentConditions.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/rainPredictionResponseModelProbabilities.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/rainPredictionResponsePredictionValue.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/trackedLocation.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/trainResponse.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherAlert.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherAlertSeverity.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherAlertType.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherData.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherPredictionResponse.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherPredictionResponseLocation.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherRecord.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherStats.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/generated/types/weatherStatsPredictionBreakdown.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/src/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/api-zod/tsconfig.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/drizzle.config.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/src/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/src/schema/farmerFeedback.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/src/schema/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/src/schema/trackedLocations.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/src/schema/weatherData.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/src/schema/weatherPredictions.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/tsconfig.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'pnpm-workspace.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'python/predict.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'python/train_model.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'replit.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tsconfig.json', LF will be replaced by CRLF the next time Git touches it
+
+C:\Users\Pytho\Downloads\microclimate-source (1)>git commit -m "farmpal"
