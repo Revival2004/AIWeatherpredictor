@@ -81,7 +81,7 @@ export default function HistoryScreen() {
     },
     listContent: {
       paddingTop: 8,
-      paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 100,
+      paddingBottom: Platform.OS === "android" ? insets.bottom + 20 : insets.bottom + 100,
     },
     emptyBox: {
       alignItems: "center",

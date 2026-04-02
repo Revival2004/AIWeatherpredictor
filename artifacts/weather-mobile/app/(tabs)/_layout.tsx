@@ -12,6 +12,7 @@ export default function TabLayout() {
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const isAndroid = Platform.OS === "android";
 
   return (
     <Tabs
@@ -20,12 +21,25 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
         tabBarStyle: {
-          position: "absolute",
+          // iOS: absolute so BlurView shows through. Web: absolute for fixed footer.
+          // Android: NOT absolute — let it sit in the normal layout so it isn't
+          // clipped by the system gesture bar on edge-to-edge devices.
+          ...(isAndroid ? {} : { position: "absolute" }),
           backgroundColor: isIOS ? "transparent" : colors.background,
-          borderTopWidth: isWeb ? 1 : 0,
+          borderTopWidth: 1,
           borderTopColor: colors.border,
-          elevation: 0,
+          elevation: isAndroid ? 8 : 0,
+          shadowOpacity: 0,
           ...(isWeb ? { height: 84 } : {}),
+          ...(isAndroid ? { height: 64 } : {}),
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontFamily: "Inter_500Medium",
+          marginBottom: isAndroid ? 6 : 0,
+        },
+        tabBarIconStyle: {
+          marginTop: isAndroid ? 4 : 0,
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -34,42 +48,54 @@ export default function TabLayout() {
               tint={isDark ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
             />
-          ) : isWeb ? (
+          ) : (
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: colors.background, borderTopWidth: 1, borderColor: colors.border },
+                {
+                  backgroundColor: colors.background,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                },
               ]}
             />
-          ) : null,
+          ),
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: "Dashboard",
-          tabBarIcon: ({ color }) => <Feather name="cloud" size={22} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="cloud" size={size ?? 22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="forecast"
         options={{
           title: "Forecast",
-          tabBarIcon: ({ color }) => <Feather name="calendar" size={22} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="calendar" size={size ?? 22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
           title: "History",
-          tabBarIcon: ({ color }) => <Feather name="clock" size={22} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="clock" size={size ?? 22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="stats"
         options={{
           title: "Analytics",
-          tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={22} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="bar-chart-2" size={size ?? 22} color={color} />
+          ),
         }}
       />
     </Tabs>

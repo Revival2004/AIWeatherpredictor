@@ -137,7 +137,7 @@ export default function ForecastScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colorTokens.light.primary} />}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: Platform.OS === "android" ? insets.bottom + 20 : insets.bottom + 100 }}
       >
         {/* Crop selector */}
         <CropSelector selectedCrop={selectedCrop} onSelect={handleCropChange} />

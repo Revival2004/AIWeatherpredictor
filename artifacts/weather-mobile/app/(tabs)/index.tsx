@@ -492,7 +492,9 @@ export default function DashboardScreen() {
       justifyContent: "center",
     },
     scrollContent: {
-      paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 100,
+      // Web/iOS: tab bar is absolute (floats over content) — need extra bottom room.
+      // Android: tab bar sits in normal layout flow — just a small courtesy gap.
+      paddingBottom: Platform.OS === "android" ? insets.bottom + 20 : insets.bottom + 100,
       paddingTop: 4,
     },
     sectionLabel: {
