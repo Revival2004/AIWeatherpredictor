@@ -201,6 +201,12 @@ def train():
 
         log.info("Training sklearn ensemble on %d samples (rain=%.1f%%)", n, 100 * y.mean())
 
+        # 80/20 train/test split for honest accuracy estimate
+        split = int(0.8 * n)
+        idx = np.random.RandomState(42).permutation(n)
+        X_tr, X_te = X[idx[:split]], X[idx[split:]]
+        y_tr, y_te = y[idx[:split]], y[idx[split:]]
+
         lr = Pipeline([
             ("scaler", StandardScaler()),
             ("clf", LogisticRegression(C=1.0, max_iter=1000, random_state=42)),
@@ -208,14 +214,14 @@ def train():
         rf = RandomForestClassifier(n_estimators=100, max_features="sqrt", max_depth=8, n_jobs=-1, random_state=42)
         gb = GradientBoostingClassifier(n_estimators=100, learning_rate=0.08, max_depth=4, random_state=42)
 
-        lr.fit(X, y); rf.fit(X, y); gb.fit(X, y)
+        lr.fit(X_tr, y_tr); rf.fit(X_tr, y_tr); gb.fit(X_tr, y_tr)
 
         def acc(model):
-            return round(float(np.mean(model.predict(X) == y)) * 100, 1)
+            return round(float(np.mean(model.predict(X_te) == y_te)) * 100, 1)
 
         lr_acc = acc(lr); rf_acc = acc(rf); gb_acc = acc(gb)
-        ens_proba = (lr.predict_proba(X)[:, 1] + rf.predict_proba(X)[:, 1] + gb.predict_proba(X)[:, 1]) / 3
-        ens_acc = round(float(np.mean((ens_proba >= 0.5) == y)) * 100, 1)
+        ens_proba = (lr.predict_proba(X_te)[:, 1] + rf.predict_proba(X_te)[:, 1] + gb.predict_proba(X_te)[:, 1]) / 3
+        ens_acc = round(float(np.mean((ens_proba >= 0.5) == y_te)) * 100, 1)
 
         trained_at = datetime.now(timezone.utc).isoformat()
         model_data = {
@@ -551,37 +557,25 @@ def bootstrap_location():
         try:
             log.info("Per-location bootstrap: %s (%.4f, %.4f) %d months", name, lat, lon, months_back)
 
-            # Fetch elevation
-            elev_url = f"https://api.open-meteo.com/v1/elevation?latitude={lat}&longitude={lon}"
-            try:
-                elev_resp = requests.get(elev_url, timeout=10)
-                elev = elev_resp.json().get("elevation", [1000])[0]
-            except Exception:
-                elev = 1000.0
+            # Fetch elevation using urllib (requests is not a dependency)
+            elev_map = fetch_elevations([(lat, lon)])
+            elev = elev_map.get((lat, lon), 1000.0)
 
-            # Fetch historical hourly data for this location
-            end_dt   = datetime.now(timezone.utc).date()
-            start_dt = (datetime.now(timezone.utc) - timedelta(days=30 * months_back)).date()
-
-            url = (
-                f"https://archive-api.open-meteo.com/v1/archive"
-                f"?latitude={lat}&longitude={lon}"
-                f"&start_date={start_dt}&end_date={end_dt}"
-                f"&hourly=temperature_2m,relativehumidity_2m,surface_pressure,"
-                f"windspeed_10m,weathercode&timezone=UTC"
-            )
-            resp = requests.get(url, timeout=90)
-            if resp.status_code != 200:
-                log.warning("Location bootstrap fetch failed for %s: %s", name, resp.status_code)
+            # Fetch historical hourly data via the shared helper
+            end_dt   = datetime.now(timezone.utc).date() - timedelta(days=7)
+            start_dt = end_dt - timedelta(days=30 * months_back)
+            data = fetch_historical_location(lat, lon, start_dt.isoformat(), end_dt.isoformat())
+            if not data or "hourly" not in data:
+                log.warning("Location bootstrap: no data returned for %s", name)
                 return
 
-            raw = resp.json().get("hourly", {})
-            times   = raw.get("time", [])
-            temps   = raw.get("temperature_2m", [])
-            humids  = raw.get("relativehumidity_2m", [])
-            presss  = raw.get("surface_pressure", [])
-            winds   = raw.get("windspeed_10m", [])
-            wcodes  = raw.get("weathercode", [])
+            raw    = data["hourly"]
+            times  = raw.get("time", [])
+            temps  = raw.get("temperature_2m", [])
+            humids = raw.get("relative_humidity_2m", [])
+            presss = raw.get("pressure_msl", [])
+            winds  = raw.get("wind_speed_10m", [])
+            wcodes = raw.get("weather_code", [])
 
             # Label pairs: (hour i → will it rain in 2h? i.e. wcode[i+2])
             pairs = []
