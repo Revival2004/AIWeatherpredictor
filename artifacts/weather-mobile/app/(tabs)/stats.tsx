@@ -111,7 +111,7 @@ export default function StatsScreen() {
       const res = await fetch(`${getApiBase()}/api/bootstrap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ monthsBack: 12 }),
+        body: JSON.stringify({ monthsBack: 120 }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -518,7 +518,7 @@ export default function StatsScreen() {
             </Text>
           </View>
           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 10, lineHeight: 17 }}>
-            Downloads 12 months of real weather records for 8 major Kenyan farming regions from the Open-Meteo archive and trains the model immediately — so rain predictions work from day one, before your farm has collected its own data.
+            Downloads 10 years of real weather records for 8 major Kenyan farming regions from the Open-Meteo archive (~600,000 hourly readings) and trains the model — capturing seasonal cycles, long rains/short rains patterns, and year-to-year climate drift.
           </Text>
           <TouchableOpacity
             style={[styles.actionBtn, {
@@ -529,7 +529,7 @@ export default function StatsScreen() {
             onPress={() => {
               Alert.alert(
                 "Seed with Historical Data?",
-                "This will fetch ~60,000 hourly readings from Open-Meteo for Nakuru, Eldoret, Kisumu, Meru, Kericho, Kitale, Nairobi and Embu (last 12 months) and train the model. Takes about 1–2 minutes.",
+                "This will fetch ~600,000 hourly readings from Open-Meteo for Nakuru, Eldoret, Kisumu, Meru, Kericho, Kitale, Nairobi and Embu (last 10 years) and train the model. Takes about 8–12 minutes — please keep the app open.",
                 [
                   { text: "Cancel", style: "cancel" },
                   { text: "Proceed", onPress: () => bootstrapMutation.mutate() },
