@@ -589,4 +589,101 @@ router.get("/weather/storm-timeline", async (req, res): Promise<void> => {
   }
 });
 
+/**
+ * GET /weather/community
+ * Returns nearby farmer activity within ~15 km radius.
+ * Used by the mobile app to show "N farmers in your zone" and boost confidence display.
+ */
+router.get("/weather/community", async (req, res): Promise<void> => {
+  const lat = parseFloat(req.query.lat as string);
+  const lon = parseFloat(req.query.lon as string);
+
+  if (isNaN(lat) || isNaN(lon)) {
+    res.status(400).json({ error: "lat and lon query params required" });
+    return;
+  }
+
+  // ~15 km bounding box: 1° ≈ 111 km → 15 km ≈ 0.135°
+  const R = 0.135;
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  try {
+    // All feedback within the bounding box for last 30 days
+    const allFeedback = await db
+      .select()
+      .from(farmerFeedbackTable)
+      .where(
+        and(
+          gte(farmerFeedbackTable.latitude, lat - R),
+          lte(farmerFeedbackTable.latitude, lat + R),
+          gte(farmerFeedbackTable.longitude, lon - R),
+          lte(farmerFeedbackTable.longitude, lon + R),
+          gte(farmerFeedbackTable.createdAt, thirtyDaysAgo)
+        )
+      );
+
+    // Count unique farm "zones" — round to 2 decimal places (≈ 1 km grid)
+    const uniqueZones = new Set(
+      allFeedback.map(
+        (f) =>
+          `${Math.round(f.latitude * 100) / 100},${Math.round(f.longitude * 100) / 100}`
+      )
+    );
+    const farmerCount = uniqueZones.size;
+
+    // Recent 24-hour report tally
+    const recent = allFeedback.filter((f) => f.createdAt >= oneDayAgo);
+    const rainReports = recent.filter((f) => f.answer === "yes").length;
+    const dryReports = recent.filter((f) => f.answer === "no").length;
+    const cloudyReports = recent.filter(
+      (f) => f.answer !== "yes" && f.answer !== "no"
+    ).length;
+
+    // Zone accuracy from weather_predictions table in the same bounding box
+    const zoneAccuracyRows = await db
+      .select({
+        total: sql<number>`count(*)`,
+        correct: sql<number>`count(*) filter (where ${weatherPredictionsTable.isCorrect} = true)`,
+      })
+      .from(weatherPredictionsTable)
+      .where(
+        and(
+          gte(weatherPredictionsTable.latitude, lat - R),
+          lte(weatherPredictionsTable.latitude, lat + R),
+          gte(weatherPredictionsTable.longitude, lon - R),
+          lte(weatherPredictionsTable.longitude, lon + R),
+          sql`${weatherPredictionsTable.isCorrect} IS NOT NULL`
+        )
+      );
+
+    const { total: zTotal, correct: zCorrect } = zoneAccuracyRows[0] ?? {
+      total: 0,
+      correct: 0,
+    };
+    const zoneAccuracy =
+      Number(zTotal) > 0
+        ? Math.round((Number(zCorrect) / Number(zTotal)) * 1000) / 10
+        : null;
+
+    res.json({
+      farmerCount,
+      feedbackCount: allFeedback.length,
+      recentReports: {
+        rain: rainReports,
+        dry: dryReports,
+        cloudy: cloudyReports,
+        total: recent.length,
+      },
+      zoneAccuracy,
+      communityBoost: allFeedback.length >= 3,
+      zoneRadiusKm: 15,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Community nearby query failed");
+    res.status(500).json({ error: "Failed to fetch community data." });
+  }
+});
+
 export default router;

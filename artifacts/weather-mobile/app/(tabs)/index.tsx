@@ -30,6 +30,7 @@ import {
 } from "@workspace/api-client-react";
 import { WeatherHeroCard } from "@/components/WeatherHeroCard";
 import AlertsBanner from "@/components/AlertsBanner";
+import CommunityInsightCard from "@/components/CommunityInsightCard";
 import { useColors } from "@/hooks/useColors";
 
 interface Coords {
@@ -597,6 +598,17 @@ export default function DashboardScreen() {
 
         {alertsData && alertsData.alerts.length > 0 && (
           <AlertsBanner alerts={alertsData.alerts} />
+        )}
+
+        {/* Community Zone — nearby farmers sharing data */}
+        {coords && (
+          <>
+            <Text style={styles.sectionLabel}>COMMUNITY ZONE</Text>
+            <CommunityInsightCard
+              lat={coords.latitude}
+              lon={coords.longitude}
+            />
+          </>
         )}
 
         {weatherData && (
