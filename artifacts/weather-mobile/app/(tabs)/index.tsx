@@ -194,7 +194,8 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
 
 const CACHE_KEY_PREFIX = "weather_cache_v1_";
 const LAST_LOC_KEY = "microclimate_last_location_v1";
-const KENYA_DEFAULT_COORDS: Coords = { latitude: -0.3031, longitude: 36.08 }; // Nakuru, Kenya
+const KENYA_DEFAULT_COORDS: Coords = { latitude: -0.3031, longitude: 36.08 };
+const KENYA_DEFAULT_LABEL = "Nakuru (default)";
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -207,29 +208,72 @@ export default function DashboardScreen() {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
+  const [usingDefault, setUsingDefault] = useState(false);
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [feedbackPending, setFeedbackPending] = useState<PendingFeedback | null>(null);
 
-  // Auto-load last known location (or Kenya default) on mount
+  // On mount: restore last saved location OR try GPS → fallback to Nakuru
   useEffect(() => {
     AsyncStorage.getItem(LAST_LOC_KEY).then((raw) => {
       if (raw) {
         try {
           const saved = JSON.parse(raw);
-          setCoords(saved.coords);
-          setLocationLabel(saved.label ?? null);
-          setFetchEnabled(true);
-          return;
+          // If the saved label is our old hard-coded default, treat as no saved location
+          const isOldDefault = saved.label === "Nakuru, Kenya" || saved.label === KENYA_DEFAULT_LABEL;
+          if (!isOldDefault) {
+            setCoords(saved.coords);
+            setLocationLabel(saved.label ?? null);
+            setUsingDefault(false);
+            setFetchEnabled(true);
+            return;
+          }
         } catch {}
       }
-      // No saved location → default to Nakuru, Kenya
-      setCoords(KENYA_DEFAULT_COORDS);
-      setLocationLabel("Nakuru, Kenya");
-      setFetchEnabled(true);
+
+      // No saved location — try GPS first
+      setGeoLoading(true);
+
+      const applyGps = (c: Coords) => {
+        setCoords(c);
+        setLocationLabel(null);
+        setUsingDefault(false);
+        setFetchEnabled(true);
+        setGeoLoading(false);
+        AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
+      };
+
+      const applyDefault = () => {
+        setCoords(KENYA_DEFAULT_COORDS);
+        setLocationLabel(KENYA_DEFAULT_LABEL);
+        setUsingDefault(true);
+        setFetchEnabled(true);
+        setGeoLoading(false);
+      };
+
+      if (Platform.OS === "web") {
+        if (typeof navigator !== "undefined" && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+            () => applyDefault(),
+            { timeout: 8000 }
+          );
+        } else {
+          applyDefault();
+        }
+      } else {
+        Location.requestForegroundPermissionsAsync().then(({ status }) => {
+          if (status !== "granted") { applyDefault(); return; }
+          return Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        }).then((pos) => {
+          if (!pos) return;
+          applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        }).catch(() => applyDefault());
+      }
     }).catch(() => {
       setCoords(KENYA_DEFAULT_COORDS);
-      setLocationLabel("Nakuru, Kenya");
+      setLocationLabel(KENYA_DEFAULT_LABEL);
+      setUsingDefault(true);
       setFetchEnabled(true);
     });
   }, []);
@@ -284,6 +328,7 @@ export default function DashboardScreen() {
               setFetchEnabled(true);
               setGeoLoading(false);
               setLocationLabel(null);
+              setUsingDefault(false);
               AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
             },
             () => {
@@ -309,6 +354,7 @@ export default function DashboardScreen() {
         setFetchEnabled(true);
         setGeoLoading(false);
         setLocationLabel(null);
+        setUsingDefault(false);
         AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
       }
     } catch {
@@ -565,6 +611,20 @@ export default function DashboardScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* Default-location banner — shown when GPS failed and Nakuru is the fallback */}
+      {usingDefault && !isOffline && (
+        <Pressable
+          onPress={handleLocate}
+          style={{ backgroundColor: "#8B5A2B22", paddingVertical: 7, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#8B5A2B33" }}
+        >
+          <Feather name="alert-circle" size={13} color="#8B5A2B" />
+          <Text style={{ color: "#8B5A2B", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
+            {geoLoading ? "Detecting your location…" : "Using Nakuru as default — tap here or the pin button to use your location"}
+          </Text>
+          {!geoLoading && <Feather name="map-pin" size={13} color="#8B5A2B" />}
+        </Pressable>
+      )}
 
       {/* Offline banner */}
       {isOffline && cachedData && (
