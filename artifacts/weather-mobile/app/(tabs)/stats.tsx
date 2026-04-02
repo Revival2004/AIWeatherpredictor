@@ -34,7 +34,7 @@ import {
   getGetWeatherStatsQueryKey,
   type CollectionResponse,
   type TrainResponse,
-} from "@workspace/api-client-react";
+} from "@/lib/api-client";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { StatsPanel } from "@/components/StatsPanel";
 import { useColors } from "@/hooks/useColors";

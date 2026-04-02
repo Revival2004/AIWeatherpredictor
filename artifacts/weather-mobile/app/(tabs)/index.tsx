@@ -35,7 +35,7 @@ import {
   getGetRainPredictionQueryKey,
   type WeatherPredictionResponse,
   type RainPredictionResponse,
-} from "@workspace/api-client-react";
+} from "@/lib/api-client";
 import { WeatherHeroCard } from "@/components/WeatherHeroCard";
 import AlertsBanner from "@/components/AlertsBanner";
 import CommunityInsightCard from "@/components/CommunityInsightCard";

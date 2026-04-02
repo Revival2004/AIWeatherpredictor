@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useGetWeatherHistory, getGetWeatherHistoryQueryKey } from "@workspace/api-client-react";
+import { useGetWeatherHistory, getGetWeatherHistoryQueryKey } from "@/lib/api-client";
 import { HistoryCard } from "@/components/HistoryCard";
 import { useColors } from "@/hooks/useColors";
 

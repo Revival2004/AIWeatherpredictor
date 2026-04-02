@@ -10,7 +10,7 @@ import {
 import { useColorScheme } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import colorTokens from "@/constants/colors";
-import type { WeatherAlert } from "@workspace/api-client-react";
+import type { WeatherAlert } from "@/lib/api-client";
 
 interface AlertsBannerProps {
   alerts: WeatherAlert[];

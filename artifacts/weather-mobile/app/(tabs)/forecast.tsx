@@ -19,7 +19,7 @@ import {
   getGetWeatherAlertsQueryKey,
   getGetLocationsQueryKey,
   type DailyForecast,
-} from "@workspace/api-client-react";
+} from "@/lib/api-client";
 import { useColorScheme } from "react-native";
 import { useColors as useColorTokens } from "@/hooks/useColors";
 import colorTokens from "@/constants/colors";

@@ -9,7 +9,7 @@ import {
 import { useColorScheme } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import colorTokens from "@/constants/colors";
-import type { DailyForecast } from "@workspace/api-client-react";
+import type { DailyForecast } from "@/lib/api-client";
 
 interface ForecastDayCardProps {
   day: DailyForecast;

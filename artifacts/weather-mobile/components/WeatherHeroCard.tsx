@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 
-import type { WeatherPredictionResponse } from "@workspace/api-client-react";
+import type { WeatherPredictionResponse } from "@/lib/api-client";
 import { useColors } from "@/hooks/useColors";
 
 interface WeatherHeroCardProps {
