@@ -19,7 +19,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { scheduleDailyFarmingReminder } from "@/services/NotificationService";
 
-setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN ?? "FarmPal.replit.app"}`);
+setBaseUrl("https://FarmPal.replit.app");
 
 SplashScreen.preventAutoHideAsync();
 
