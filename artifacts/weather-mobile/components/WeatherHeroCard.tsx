@@ -35,23 +35,6 @@ function wmoCondition(code: number): string {
   return "Thunderstorm";
 }
 
-function wmoEmoji(code: number): string {
-  if (code === 0) return "☀️";
-  if (code <= 1) return "🌤️";
-  if (code <= 3) return "⛅";
-  if (code <= 9) return "🌫️";
-  if (code <= 19) return "🌦️";
-  if (code <= 29) return "🌧️";
-  if (code <= 39) return "🌨️";
-  if (code <= 49) return "🌫️";
-  if (code <= 59) return "🌦️";
-  if (code <= 69) return "🌧️";
-  if (code <= 79) return "❄️";
-  if (code <= 84) return "🌦️";
-  if (code <= 94) return "🌩️";
-  return "⛈️";
-}
-
 function wmoIcon(code: number): keyof typeof Feather.glyphMap {
   if (code === 0) return "sun";
   if (code <= 3) return "cloud";
@@ -117,7 +100,7 @@ export function WeatherHeroCard({
     return (
       <View style={[styles.card, { backgroundColor: colors.primary }]}>
         <View style={styles.loadingBox}>
-          <Text style={{ fontSize: 52 }}>🌍</Text>
+          <Feather name="globe" size={52} color="rgba(255,255,255,0.9)" />
           <Text style={[styles.loadingText, { marginTop: 12 }]}>Loading your farm's weather…</Text>
         </View>
       </View>
@@ -126,14 +109,15 @@ export function WeatherHeroCard({
 
   const { weather, prediction, location } = data;
   const conditionStr = wmoCondition(weather.weathercode);
-  const emoji = wmoEmoji(weather.weathercode);
   const predColor = predictionColor(prediction?.prediction ?? "");
   const confPct = Math.round((prediction?.confidence ?? 0) * 100);
 
   return (
     <View style={[styles.card, { backgroundColor: colors.primary }]}>
-      {/* Decorative large emoji — top right */}
-      <Text style={styles.emojiDecor}>{emoji}</Text>
+      {/* Decorative large icon — top right */}
+      <View style={styles.emojiDecor} pointerEvents="none">
+        <Feather name={wmoIcon(weather.weathercode)} size={110} color="rgba(255,255,255,0.18)" />
+      </View>
 
       <View style={styles.inner}>
         {/* Top row: location + refresh */}
@@ -205,11 +189,8 @@ const styles = StyleSheet.create({
   },
   emojiDecor: {
     position: "absolute",
-    top: -8,
-    right: 16,
-    fontSize: 96,
-    opacity: 0.18,
-    lineHeight: 120,
+    top: -12,
+    right: 8,
   },
   inner: {
     padding: 24,
