@@ -67,158 +67,128 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
   const { t } = useLanguage();
   const willRain = data.predictionValue === "yes";
   const pct = Math.round(data.probability * 100);
-  const confPct = Math.round(data.confidence * 100);
   const isSklearn = data.modelVersion?.startsWith("sklearn");
   const mp = data.modelProbabilities;
+
+  // Colour theme: red >= 60%, amber 30-60%, green < 30%
+  const accentColor = pct >= 60 ? "#EF4444" : pct >= 30 ? "#F59E0B" : "#10B981";
+  const bgColor = pct >= 60 ? "#FEF2F2" : pct >= 30 ? "#FFFBEB" : "#F0FDF4";
 
   return (
     <View
       style={{
         marginHorizontal: 16,
         marginTop: 4,
-        borderRadius: 16,
+        borderRadius: 20,
         overflow: "hidden",
+        backgroundColor: colors.card,
         borderWidth: 1,
-        borderColor: willRain ? "#3B82F620" : "#3D8B3720",
-        backgroundColor: willRain ? "#3B82F608" : "#3D8B3708",
+        borderColor: colors.border,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
       }}
     >
-      {/* Header row */}
-      <View
-        style={{
-          flexDirection: "row",
+      {/* Main content row */}
+      <View style={{ flexDirection: "row", alignItems: "center", padding: 18, gap: 16 }}>
+        {/* Big probability circle */}
+        <View style={{
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          backgroundColor: bgColor,
+          borderWidth: 3,
+          borderColor: accentColor,
           alignItems: "center",
-          justifyContent: "space-between",
-          padding: 16,
-          paddingBottom: 12,
-          borderBottomWidth: 1,
-          borderColor: willRain ? "#3B82F618" : "#3D8B3718",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <View
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: willRain ? "#3B82F620" : "#3D8B3720",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
+          justifyContent: "center",
+          flexShrink: 0,
+        }}>
+          <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: accentColor, lineHeight: 28 }}>
+            {pct}%
+          </Text>
+          <Text style={{ fontSize: 9, fontFamily: "Inter_500Medium", color: accentColor, opacity: 0.75 }}>
+            RAIN
+          </Text>
+        </View>
+
+        {/* Label + bar */}
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
             <Feather
-              name={willRain ? "cloud-rain" : "sun"}
-              size={20}
-              color={willRain ? "#3B82F6" : "#3D8B37"}
+              name={willRain ? "cloud-rain" : pct >= 30 ? "cloud-drizzle" : "sun"}
+              size={14}
+              color={accentColor}
             />
-          </View>
-          <View>
             <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: colors.foreground }}>
               {willRain ? t("rainExpected") : t("noRain")}
             </Text>
-            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-              {t("aiPrediction")} · {confPct}% {t("confidence")}
-            </Text>
+          </View>
+          <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 8 }}>
+            {t("aiPrediction")} · 2-hour window
+          </Text>
+
+          {/* Segmented probability bar */}
+          <View style={{ flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", gap: 2 }}>
+            {[20, 20, 20, 20, 20].map((_, i) => {
+              const threshold = (i + 1) * 20;
+              const filled = pct >= threshold - 10;
+              return (
+                <View
+                  key={i}
+                  style={{
+                    flex: 1,
+                    borderRadius: 2,
+                    backgroundColor: filled ? accentColor : colors.muted,
+                    opacity: filled ? 1 - i * 0.05 : 1,
+                  }}
+                />
+              );
+            })}
+          </View>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 3 }}>
+            <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>Low</Text>
+            <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>High</Text>
           </View>
         </View>
-        <View
-          style={{
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 20,
-            backgroundColor: willRain ? "#3B82F620" : "#3D8B3720",
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 15,
-              fontFamily: "Inter_700Bold",
-              color: willRain ? "#3B82F6" : "#3D8B37",
-            }}
-          >
-            {pct}%
-          </Text>
-        </View>
       </View>
 
-      {/* Probability bar */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: mp ? 8 : 16 }}>
-        <View style={{ height: 6, backgroundColor: colors.muted, borderRadius: 3, overflow: "hidden" }}>
-          <View
-            style={{
-              height: 6,
-              borderRadius: 3,
-              backgroundColor: willRain ? "#3B82F6" : "#3D8B37",
-              width: `${pct}%`,
-            }}
-          />
-        </View>
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            marginTop: 4,
-          }}
-        >
-          <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-            {t("noRainLabel")}
-          </Text>
-          <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-            {t("rainLabel")}
-          </Text>
-        </View>
-      </View>
-
-      {/* Per-model votes (only if sklearn ensemble) */}
+      {/* Per-model votes — only shown for sklearn */}
       {isSklearn && mp && (
-        <View
-          style={{
-            marginHorizontal: 16,
-            marginBottom: 14,
-            padding: 10,
-            backgroundColor: colors.muted,
-            borderRadius: 10,
-            flexDirection: "row",
-            justifyContent: "space-around",
-          }}
-        >
+        <View style={{
+          flexDirection: "row",
+          borderTopWidth: 1,
+          borderColor: colors.border,
+          paddingVertical: 10,
+          paddingHorizontal: 18,
+          gap: 0,
+          backgroundColor: colors.muted,
+        }}>
           {[
-            { label: "LR", value: mp.lr, color: "#4A90D9" },
-            { label: "RF", value: mp.rf, color: "#3D8B37" },
-            { label: "GB", value: mp.gb, color: "#D4851A" },
-          ].map((m) => (
-            <View key={m.label} style={{ alignItems: "center", gap: 2 }}>
-              <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: m.color }}>
-                {Math.round(m.value * 100)}%
+            { label: "Logistic Reg.", value: mp.lr, color: "#4A90D9" },
+            { label: "Random Forest", value: mp.rf, color: "#3D8B37" },
+            { label: "Gradient Boost", value: mp.gb, color: "#D4851A" },
+            { label: "Ensemble", value: data.probability, color: accentColor },
+          ].map((m, i) => (
+            <View key={m.label} style={{ flex: 1, alignItems: "center", borderLeftWidth: i > 0 ? 1 : 0, borderColor: colors.border }}>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: m.color }}>
+                {Math.round((m.value ?? 0) * 100)}%
               </Text>
-              <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+              <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: colors.mutedForeground, textAlign: "center" }}>
                 {m.label}
               </Text>
             </View>
           ))}
-          <View style={{ width: 1, backgroundColor: colors.border }} />
-          <View style={{ alignItems: "center", gap: 2 }}>
-            <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: "#8B2FC9" }}>
-              {pct}%
-            </Text>
-            <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-              Ensemble
-            </Text>
-          </View>
         </View>
       )}
-
-      {/* Model badge */}
-      <View style={{ paddingHorizontal: 16, paddingBottom: 12, alignItems: "flex-end" }}>
-        <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-          {isSklearn ? "scikit-learn" : "rule-based"} · {data.modelVersion}
-        </Text>
-      </View>
     </View>
   );
 }
 
 const CACHE_KEY_PREFIX = "weather_cache_v1_";
+const LAST_LOC_KEY = "microclimate_last_location_v1";
+const KENYA_DEFAULT_COORDS: Coords = { latitude: -0.3031, longitude: 36.08 }; // Nakuru, Kenya
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -234,6 +204,29 @@ export default function DashboardScreen() {
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [feedbackPending, setFeedbackPending] = useState<PendingFeedback | null>(null);
+
+  // Auto-load last known location (or Kenya default) on mount
+  useEffect(() => {
+    AsyncStorage.getItem(LAST_LOC_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const saved = JSON.parse(raw);
+          setCoords(saved.coords);
+          setLocationLabel(saved.label ?? null);
+          setFetchEnabled(true);
+          return;
+        } catch {}
+      }
+      // No saved location → default to Nakuru, Kenya
+      setCoords(KENYA_DEFAULT_COORDS);
+      setLocationLabel("Nakuru, Kenya");
+      setFetchEnabled(true);
+    }).catch(() => {
+      setCoords(KENYA_DEFAULT_COORDS);
+      setLocationLabel("Nakuru, Kenya");
+      setFetchEnabled(true);
+    });
+  }, []);
 
   const {
     data: weatherData,
@@ -280,9 +273,12 @@ export default function DashboardScreen() {
         if (typeof navigator !== "undefined" && navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (pos) => {
-              setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+              const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+              setCoords(c);
               setFetchEnabled(true);
               setGeoLoading(false);
+              setLocationLabel(null);
+              AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
             },
             () => {
               setLocError("Location unavailable");
@@ -302,9 +298,12 @@ export default function DashboardScreen() {
           return;
         }
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        setCoords(c);
         setFetchEnabled(true);
         setGeoLoading(false);
+        setLocationLabel(null);
+        AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
       }
     } catch {
       setLocError("Could not get location");
@@ -549,11 +548,13 @@ export default function DashboardScreen() {
         visible={showLocationPicker}
         onClose={() => setShowLocationPicker(false)}
         onSelect={(loc: PickedLocation) => {
-          setCoords({ latitude: loc.lat, longitude: loc.lon });
+          const c = { latitude: loc.lat, longitude: loc.lon };
+          setCoords(c);
           setFetchEnabled(true);
           setLocError(null);
           setLocationLabel(loc.displayName);
           setShowLocationPicker(false);
+          AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: loc.displayName })).catch(() => {});
         }}
       />
 
@@ -562,10 +563,12 @@ export default function DashboardScreen() {
         visible={showMapPicker}
         onClose={() => setShowMapPicker(false)}
         onConfirm={(loc) => {
-          setCoords({ latitude: loc.latitude, longitude: loc.longitude });
+          const c = { latitude: loc.latitude, longitude: loc.longitude };
+          setCoords(c);
           setFetchEnabled(true);
           setLocError(null);
           setLocationLabel(loc.name);
+          AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: loc.name })).catch(() => {});
         }}
       />
 

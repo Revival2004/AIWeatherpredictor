@@ -46,7 +46,17 @@ export default function ForecastScreen() {
     requestLocation();
   }, []);
 
+  const KENYA_DEFAULT = { lat: -0.3031, lon: 36.08 }; // Nakuru, Kenya
+
   const requestLocation = useCallback(async () => {
+    // Set an immediate default so the screen isn't blank while GPS resolves
+    const cached = await AsyncStorage.getItem(LOC_KEY).catch(() => null);
+    if (cached) {
+      setCoords(JSON.parse(cached));
+    } else {
+      setCoords(KENYA_DEFAULT);
+    }
+
     try {
       if (Platform.OS === "web") {
         navigator.geolocation?.getCurrentPosition(
@@ -55,29 +65,19 @@ export default function ForecastScreen() {
             setCoords(c);
             AsyncStorage.setItem(LOC_KEY, JSON.stringify(c)).catch(() => {});
           },
-          async () => {
-            const cached = await AsyncStorage.getItem(LOC_KEY);
-            if (cached) setCoords(JSON.parse(cached));
-            else setCoords({ lat: 51.5, lon: -0.1 });
-          }
+          () => {}, // Keep cached/default on failure
+          { timeout: 8000 }
         );
       } else {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          const cached = await AsyncStorage.getItem(LOC_KEY);
-          if (cached) setCoords(JSON.parse(cached));
-          else setCoords({ lat: 51.5, lon: -0.1 });
-          return;
-        }
+        if (status !== "granted") return;
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const c = { lat: loc.coords.latitude, lon: loc.coords.longitude };
         setCoords(c);
         AsyncStorage.setItem(LOC_KEY, JSON.stringify(c)).catch(() => {});
       }
     } catch {
-      const cached = await AsyncStorage.getItem(LOC_KEY);
-      if (cached) setCoords(JSON.parse(cached));
-      else setCoords({ lat: 51.5, lon: -0.1 });
+      // Keep cached/default
     }
   }, []);
 

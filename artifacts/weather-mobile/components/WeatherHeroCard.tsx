@@ -35,6 +35,23 @@ function wmoCondition(code: number): string {
   return "Thunderstorm";
 }
 
+function wmoEmoji(code: number): string {
+  if (code === 0) return "☀️";
+  if (code <= 1) return "🌤️";
+  if (code <= 3) return "⛅";
+  if (code <= 9) return "🌫️";
+  if (code <= 19) return "🌦️";
+  if (code <= 29) return "🌧️";
+  if (code <= 39) return "🌨️";
+  if (code <= 49) return "🌫️";
+  if (code <= 59) return "🌦️";
+  if (code <= 69) return "🌧️";
+  if (code <= 79) return "❄️";
+  if (code <= 84) return "🌦️";
+  if (code <= 94) return "🌩️";
+  return "⛈️";
+}
+
 function wmoIcon(code: number): keyof typeof Feather.glyphMap {
   if (code === 0) return "sun";
   if (code <= 3) return "cloud";
@@ -50,20 +67,13 @@ function wmoIcon(code: number): keyof typeof Feather.glyphMap {
   return "cloud-lightning";
 }
 
-const predictionIcons: Record<string, keyof typeof Feather.glyphMap> = {
-  "Heavy Rain": "cloud-rain",
-  "Light Rain": "cloud-drizzle",
-  "Clear Sky": "sun",
-  "Partly Cloudy": "cloud",
-  "Overcast": "cloud",
-  "Thunderstorm": "cloud-lightning",
-  "Frost Risk": "thermometer",
-  "High Wind": "wind",
-  "Fog": "align-justify",
-  "Dry Conditions": "sun",
-  "Storm Watch": "alert-triangle",
-  "Light Snow": "cloud-snow",
-};
+function predictionColor(pred: string): string {
+  if (pred.includes("Rain") || pred.includes("Storm") || pred.includes("Thunder")) return "#EF4444";
+  if (pred.includes("Frost")) return "#60A5FA";
+  if (pred.includes("Wind")) return "#F59E0B";
+  if (pred.includes("Stable") || pred.includes("Clear") || pred.includes("Dry")) return "#10B981";
+  return "#A78BFA";
+}
 
 export function WeatherHeroCard({
   data,
@@ -78,195 +88,12 @@ export function WeatherHeroCard({
     onRefresh();
   };
 
-  const styles = StyleSheet.create({
-    card: {
-      borderRadius: 24,
-      overflow: "hidden",
-      backgroundColor: colors.primary,
-      marginHorizontal: 16,
-    },
-    inner: {
-      padding: 24,
-    },
-    locationRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginBottom: 4,
-      gap: 6,
-    },
-    locationText: {
-      color: colors.primaryForeground,
-      fontSize: 14,
-      fontFamily: "Inter_500Medium",
-      opacity: 0.85,
-    },
-    refreshBtn: {
-      marginLeft: "auto" as unknown as number,
-      padding: 4,
-    },
-    tempText: {
-      color: colors.primaryForeground,
-      fontSize: 72,
-      fontFamily: "Inter_700Bold",
-      lineHeight: 80,
-      marginTop: 8,
-    },
-    conditionText: {
-      color: colors.primaryForeground,
-      fontSize: 18,
-      fontFamily: "Inter_400Regular",
-      opacity: 0.9,
-      marginBottom: 20,
-    },
-    divider: {
-      height: 1,
-      backgroundColor: "rgba(255,255,255,0.25)",
-      marginVertical: 16,
-    },
-    predictionRow: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: 10,
-    },
-    predictionLabel: {
-      color: colors.primaryForeground,
-      fontSize: 12,
-      fontFamily: "Inter_500Medium",
-      opacity: 0.75,
-      marginBottom: 2,
-    },
-    predictionText: {
-      color: colors.primaryForeground,
-      fontSize: 16,
-      fontFamily: "Inter_600SemiBold",
-    },
-    confidenceRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      marginTop: 4,
-    },
-    confidenceBar: {
-      height: 4,
-      flex: 1,
-      borderRadius: 2,
-      backgroundColor: "rgba(255,255,255,0.25)",
-      overflow: "hidden",
-    },
-    confidenceFill: {
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: "rgba(255,255,255,0.85)",
-    },
-    confidenceText: {
-      color: colors.primaryForeground,
-      fontSize: 12,
-      opacity: 0.75,
-      fontFamily: "Inter_400Regular",
-      minWidth: 36,
-      textAlign: "right",
-    },
-    learningBadge: {
-      backgroundColor: "rgba(255,255,255,0.25)",
-      borderRadius: 4,
-      paddingHorizontal: 5,
-      paddingVertical: 2,
-    },
-    learningBadgeText: {
-      color: colors.primaryForeground,
-      fontSize: 9,
-      fontFamily: "Inter_700Bold",
-      letterSpacing: 0.5,
-    },
-    dataPointsText: {
-      color: colors.primaryForeground,
-      fontSize: 11,
-      opacity: 0.65,
-      fontFamily: "Inter_400Regular",
-      marginTop: 4,
-    },
-    statsRow: {
-      flexDirection: "row",
-      marginTop: 16,
-      gap: 8,
-    },
-    statItem: {
-      flex: 1,
-      backgroundColor: "rgba(255,255,255,0.15)",
-      borderRadius: 12,
-      padding: 10,
-      alignItems: "center",
-    },
-    statValue: {
-      color: colors.primaryForeground,
-      fontSize: 14,
-      fontFamily: "Inter_700Bold",
-    },
-    statLabel: {
-      color: colors.primaryForeground,
-      fontSize: 10,
-      opacity: 0.7,
-      fontFamily: "Inter_400Regular",
-      marginTop: 2,
-    },
-    loadingBox: {
-      alignItems: "center",
-      justifyContent: "center",
-      paddingVertical: 48,
-    },
-    loadingText: {
-      color: colors.primaryForeground,
-      marginTop: 12,
-      fontFamily: "Inter_500Medium",
-      opacity: 0.8,
-    },
-    errorBox: {
-      alignItems: "center",
-      justifyContent: "center",
-      paddingVertical: 48,
-    },
-    errorText: {
-      color: colors.primaryForeground,
-      marginTop: 12,
-      fontFamily: "Inter_500Medium",
-      opacity: 0.8,
-      textAlign: "center",
-    },
-    retryBtn: {
-      marginTop: 16,
-      backgroundColor: "rgba(255,255,255,0.25)",
-      borderRadius: 20,
-      paddingHorizontal: 20,
-      paddingVertical: 8,
-    },
-    retryText: {
-      color: colors.primaryForeground,
-      fontFamily: "Inter_600SemiBold",
-      fontSize: 14,
-    },
-    emptyBox: {
-      alignItems: "center",
-      justifyContent: "center",
-      paddingVertical: 48,
-    },
-    emptyText: {
-      color: colors.primaryForeground,
-      marginTop: 12,
-      fontFamily: "Inter_500Medium",
-      opacity: 0.7,
-      textAlign: "center",
-      paddingHorizontal: 16,
-    },
-  });
-
   if (isLoading) {
     return (
-      <View style={styles.card}>
-        <View style={styles.inner}>
-          <View style={styles.loadingBox}>
-            <ActivityIndicator color="rgba(255,255,255,0.9)" size="large" />
-            <Text style={styles.loadingText}>Fetching microclimate data…</Text>
-          </View>
+      <View style={[styles.card, { backgroundColor: colors.primary }]}>
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color="rgba(255,255,255,0.9)" size="large" />
+          <Text style={styles.loadingText}>Fetching microclimate data…</Text>
         </View>
       </View>
     );
@@ -274,15 +101,13 @@ export function WeatherHeroCard({
 
   if (error) {
     return (
-      <View style={styles.card}>
-        <View style={styles.inner}>
-          <View style={styles.errorBox}>
-            <Feather name="alert-triangle" size={32} color="rgba(255,255,255,0.9)" />
-            <Text style={styles.errorText}>Could not fetch weather data</Text>
-            <Pressable style={styles.retryBtn} onPress={handleRefresh}>
-              <Text style={styles.retryText}>Try Again</Text>
-            </Pressable>
-          </View>
+      <View style={[styles.card, { backgroundColor: colors.primary }]}>
+        <View style={styles.loadingBox}>
+          <Feather name="alert-triangle" size={32} color="rgba(255,255,255,0.9)" />
+          <Text style={styles.loadingText}>Could not fetch weather data</Text>
+          <Pressable style={styles.retryBtn} onPress={handleRefresh}>
+            <Text style={styles.retryText}>Try Again</Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -290,14 +115,10 @@ export function WeatherHeroCard({
 
   if (!data) {
     return (
-      <View style={styles.card}>
-        <View style={styles.inner}>
-          <View style={styles.emptyBox}>
-            <Feather name="map-pin" size={32} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.emptyText}>
-              Tap the pin button to fetch your local microclimate
-            </Text>
-          </View>
+      <View style={[styles.card, { backgroundColor: colors.primary }]}>
+        <View style={styles.loadingBox}>
+          <Text style={{ fontSize: 52 }}>🌍</Text>
+          <Text style={[styles.loadingText, { marginTop: 12 }]}>Loading your farm's weather…</Text>
         </View>
       </View>
     );
@@ -305,82 +126,211 @@ export function WeatherHeroCard({
 
   const { weather, prediction, location } = data;
   const conditionStr = wmoCondition(weather.weathercode);
-  const iconName = wmoIcon(weather.weathercode);
-  const predIconName = predictionIcons[prediction?.prediction ?? ""] ?? "sun";
+  const emoji = wmoEmoji(weather.weathercode);
+  const predColor = predictionColor(prediction?.prediction ?? "");
   const confPct = Math.round((prediction?.confidence ?? 0) * 100);
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors.primary }]}>
+      {/* Decorative large emoji — top right */}
+      <Text style={styles.emojiDecor}>{emoji}</Text>
+
       <View style={styles.inner}>
-        <View style={styles.locationRow}>
-          <Feather name="map-pin" size={14} color={colors.primaryForeground} style={{ opacity: 0.8 }} />
-          <Text style={styles.locationText}>
-            {`${location.lat.toFixed(2)}°N, ${location.lon.toFixed(2)}°E`}
-          </Text>
-          <Pressable
-            style={styles.refreshBtn}
-            onPress={handleRefresh}
-            testID="refresh-btn"
-          >
-            <Feather name="refresh-cw" size={18} color={colors.primaryForeground} style={{ opacity: 0.85 }} />
+        {/* Top row: location + refresh */}
+        <View style={styles.topRow}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <Feather name="map-pin" size={12} color="rgba(255,255,255,0.75)" />
+            <Text style={styles.locationText}>
+              {`${location.lat.toFixed(3)}°, ${location.lon.toFixed(3)}°`}
+            </Text>
+          </View>
+          <Pressable onPress={handleRefresh} style={styles.refreshBtn} testID="refresh-btn">
+            <Feather name="refresh-cw" size={16} color="rgba(255,255,255,0.85)" />
           </Pressable>
         </View>
 
+        {/* Temperature */}
         <Text style={styles.tempText}>{Math.round(weather.temperature)}°</Text>
-        <Text style={styles.conditionText}>
-          <Feather name={iconName} size={16} /> {conditionStr}
-        </Text>
-
-        <View style={styles.divider} />
-
-        <View style={styles.predictionRow}>
-          <Feather
-            name={predIconName}
-            size={20}
-            color={colors.primaryForeground}
-            style={{ marginTop: 2 }}
-          />
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-              <Text style={styles.predictionLabel}>AI PREDICTION</Text>
-              {prediction?.modelVersion && prediction.modelVersion !== "rules" && (
-                <View style={styles.learningBadge}>
-                  <Text style={styles.learningBadgeText}>
-                    {prediction.modelVersion === "pattern-learned" ? "LEARNED" : "LEARNING"}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.predictionText}>{prediction?.prediction ?? "—"}</Text>
-            <View style={styles.confidenceRow}>
-              <View style={styles.confidenceBar}>
-                <View style={[styles.confidenceFill, { width: `${confPct}%` }]} />
-              </View>
-              <Text style={styles.confidenceText}>{confPct}%</Text>
-            </View>
-            {(prediction?.dataPoints ?? 0) > 0 && (
-              <Text style={styles.dataPointsText}>
-                Based on {prediction!.dataPoints} historical readings
-              </Text>
-            )}
-          </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: -4, marginBottom: 16 }}>
+          <Feather name={wmoIcon(weather.weathercode)} size={14} color="rgba(255,255,255,0.8)" />
+          <Text style={styles.conditionText}>{conditionStr}</Text>
         </View>
 
+        {/* Stats grid */}
         <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{weather.humidity}%</Text>
-            <Text style={styles.statLabel}>Humidity</Text>
+          {[
+            { icon: "droplet" as const, val: `${weather.humidity}%`, lbl: "Humidity" },
+            { icon: "wind" as const, val: `${weather.windspeed}`, lbl: "km/h" },
+            { icon: "activity" as const, val: `${weather.pressure}`, lbl: "hPa" },
+          ].map((s) => (
+            <View key={s.lbl} style={styles.statPill}>
+              <Feather name={s.icon} size={13} color="rgba(255,255,255,0.7)" />
+              <View>
+                <Text style={styles.statValue}>{s.val}</Text>
+                <Text style={styles.statLabel}>{s.lbl}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* AI Prediction */}
+        <View style={styles.predRow}>
+          <View style={[styles.predDot, { backgroundColor: predColor }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.predLabel}>AI CONDITION FORECAST</Text>
+            <Text style={styles.predText}>{prediction?.prediction ?? "—"}</Text>
           </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{weather.windspeed}</Text>
-            <Text style={styles.statLabel}>km/h</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{weather.pressure}</Text>
-            <Text style={styles.statLabel}>hPa</Text>
+          <View style={styles.confBadge}>
+            <Text style={styles.confText}>{confPct}%</Text>
           </View>
         </View>
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: 28,
+    marginHorizontal: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  emojiDecor: {
+    position: "absolute",
+    top: -8,
+    right: 16,
+    fontSize: 96,
+    opacity: 0.18,
+    lineHeight: 120,
+  },
+  inner: {
+    padding: 24,
+    paddingTop: 20,
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  locationText: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  refreshBtn: {
+    padding: 6,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 10,
+  },
+  tempText: {
+    color: "#ffffff",
+    fontSize: 80,
+    fontFamily: "Inter_700Bold",
+    lineHeight: 88,
+    letterSpacing: -2,
+  },
+  conditionText: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 16,
+    fontFamily: "Inter_400Regular",
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  statPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  statValue: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    lineHeight: 16,
+  },
+  statLabel: {
+    color: "rgba(255,255,255,0.65)",
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 13,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    marginVertical: 16,
+  },
+  predRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  predDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    flexShrink: 0,
+  },
+  predLabel: {
+    color: "rgba(255,255,255,0.65)",
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  predText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+  },
+  confBadge: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  confText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+  },
+  loadingBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 52,
+    gap: 8,
+  },
+  loadingText: {
+    color: "rgba(255,255,255,0.85)",
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  retryBtn: {
+    marginTop: 12,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  retryText: {
+    color: "#fff",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+  },
+});
