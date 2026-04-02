@@ -1,22 +1,39 @@
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+let _notif: typeof import("expo-notifications") | null = null;
+
+function getNotif() {
+  if (_notif) return _notif;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _notif = require("expo-notifications") as typeof import("expo-notifications");
+    _notif.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch {
+    _notif = null;
+  }
+  return _notif;
+}
 
 export async function requestNotificationPermission(): Promise<boolean> {
   if (Platform.OS === "web") return false;
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === "granted") return true;
-  const { status } = await Notifications.requestPermissionsAsync();
-  return status === "granted";
+  const n = getNotif();
+  if (!n) return false;
+  try {
+    const { status: existing } = await n.getPermissionsAsync();
+    if (existing === "granted") return true;
+    const { status } = await n.requestPermissionsAsync();
+    return status === "granted";
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -25,38 +42,38 @@ export async function requestNotificationPermission(): Promise<boolean> {
  */
 export async function scheduleDailyFarmingReminder(): Promise<void> {
   if (Platform.OS === "web") return;
+  const n = getNotif();
+  if (!n) return;
   try {
     const granted = await requestNotificationPermission();
     if (!granted) return;
 
-    // Cancel any existing daily reminder before rescheduling
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    const existing = scheduled.find((n) => n.content.data?.type === "daily_reminder");
+    const scheduled = await n.getAllScheduledNotificationsAsync();
+    const existing = scheduled.find((notif) => notif.content.data?.type === "daily_reminder");
     if (existing) {
-      await Notifications.cancelScheduledNotificationAsync(existing.identifier);
+      await n.cancelScheduledNotificationAsync(existing.identifier);
     }
 
-    await Notifications.scheduleNotificationAsync({
+    await n.scheduleNotificationAsync({
       content: {
-        title: "🌱 Good morning, farmer!",
-        body: "Open Microclimate to check today's rain forecast for your farm.",
+        title: "Good morning, farmer!",
+        body: "Open FarmPal to check today's rain forecast for your farm.",
         data: { type: "daily_reminder" },
         sound: true,
       },
       trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        type: n.SchedulableTriggerInputTypes.DAILY,
         hour: 6,
         minute: 0,
       },
     });
-  } catch (err) {
-    console.warn("Failed to schedule daily notification:", err);
+  } catch {
   }
 }
 
 /**
  * Send an immediate high-rain-probability alert.
- * Only fires when probability ≥ 70% to avoid alert fatigue.
+ * Only fires when probability >= 70% to avoid alert fatigue.
  */
 export async function sendRainAlert(
   probability: number,
@@ -64,72 +81,72 @@ export async function sendRainAlert(
 ): Promise<void> {
   if (Platform.OS === "web") return;
   if (probability < 0.7) return;
-
+  const n = getNotif();
+  if (!n) return;
   try {
     const granted = await requestNotificationPermission();
     if (!granted) return;
 
     const pct = Math.round(probability * 100);
-    await Notifications.scheduleNotificationAsync({
+    await n.scheduleNotificationAsync({
       content: {
-        title: `🌧️ Rain likely at ${locationName}`,
+        title: `Rain likely at ${locationName}`,
         body: `${pct}% chance of rain in the next 2 hours. Consider covering your crops or postponing field work.`,
         data: { type: "rain_alert", probability },
         sound: true,
       },
       trigger: null,
     });
-  } catch (err) {
-    console.warn("Failed to send rain alert:", err);
+  } catch {
   }
 }
 
 /**
  * Schedule a notification exactly 2 hours after a rain prediction.
  * When the farmer taps it they are prompted: "Did it rain?"
- * Cancels any previously pending feedback reminder first so there's never
- * more than one queued at a time.
+ * Cancels any previously pending feedback reminder first.
  */
 export async function scheduleFeedbackReminder(
   locationName: string,
 ): Promise<void> {
   if (Platform.OS === "web") return;
+  const n = getNotif();
+  if (!n) return;
   try {
     const granted = await requestNotificationPermission();
     if (!granted) return;
 
-    // Cancel any existing feedback reminder
     await cancelFeedbackReminder();
 
-    await Notifications.scheduleNotificationAsync({
+    await n.scheduleNotificationAsync({
       content: {
-        title: "🌾 How was the weather?",
+        title: "How was the weather?",
         body: `It's been 2 hours since your prediction at ${locationName}. Did it actually rain? Tap to tell us — it trains the model.`,
         data: { type: "feedback_reminder", locationName },
         sound: true,
       },
       trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 2 * 60 * 60, // 2 hours
+        type: n.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 2 * 60 * 60,
         repeats: false,
       },
     });
-  } catch (err) {
-    console.warn("Failed to schedule feedback reminder:", err);
+  } catch {
   }
 }
 
 /**
  * Cancel any pending feedback reminder notification.
- * Call this after the farmer has already answered.
  */
 export async function cancelFeedbackReminder(): Promise<void> {
   if (Platform.OS === "web") return;
+  const n = getNotif();
+  if (!n) return;
   try {
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    for (const n of scheduled) {
-      if (n.content.data?.type === "feedback_reminder") {
-        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    const scheduled = await n.getAllScheduledNotificationsAsync();
+    for (const notif of scheduled) {
+      if (notif.content.data?.type === "feedback_reminder") {
+        await n.cancelScheduledNotificationAsync(notif.identifier);
       }
     }
   } catch {}
@@ -140,5 +157,9 @@ export async function cancelFeedbackReminder(): Promise<void> {
  */
 export async function cancelAllNotifications(): Promise<void> {
   if (Platform.OS === "web") return;
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  const n = getNotif();
+  if (!n) return;
+  try {
+    await n.cancelAllScheduledNotificationsAsync();
+  } catch {}
 }

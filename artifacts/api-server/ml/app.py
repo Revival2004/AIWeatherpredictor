@@ -678,10 +678,28 @@ def _auto_bootstrap_on_start():
 
 if __name__ == "__main__":
     port = int(os.environ.get("ML_SERVICE_PORT", 5000))
-    log.info("Starting sklearn ML service on port %d", port)
+    log.info("Starting FarmPal ML service on port %d via gunicorn", port)
 
-    # Auto-bootstrap in a daemon thread so Flask starts immediately
-    t = threading.Thread(target=_auto_bootstrap_on_start, daemon=True)
-    t.start()
+    import subprocess, sys as _sys
 
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    gunicorn_bin = os.path.join(os.path.dirname(_sys.executable), "gunicorn")
+    if not os.path.exists(gunicorn_bin):
+        gunicorn_bin = "gunicorn"
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Use gunicorn with 4 workers + preload so the bootstrap thread
+    # starts exactly once before workers are forked.
+    result = subprocess.run(
+        [
+            gunicorn_bin,
+            "--workers", "4",
+            "--bind", f"0.0.0.0:{port}",
+            "--timeout", "120",
+            "--preload",           # load app once → bootstrap runs once
+            "--log-level", "info",
+            "app:app",
+        ],
+        cwd=script_dir,
+    )
+    raise SystemExit(result.returncode)

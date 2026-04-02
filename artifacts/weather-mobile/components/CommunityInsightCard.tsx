@@ -70,7 +70,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { color: colors.foreground }]}>Your Zone</Text>
             <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-              You're the first farmer using Microclimate in this area.{"\n"}
+              You're the first farmer using FarmPal in this area.{"\n"}
               Your reports will build the local model for everyone nearby.
             </Text>
           </View>

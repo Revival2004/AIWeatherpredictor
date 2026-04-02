@@ -76,7 +76,7 @@ export function WeatherHeroCard({
       <View style={[styles.card, { backgroundColor: colors.primary }]}>
         <View style={styles.loadingBox}>
           <ActivityIndicator color="rgba(255,255,255,0.9)" size="large" />
-          <Text style={styles.loadingText}>Fetching microclimate data…</Text>
+          <Text style={styles.loadingText}>Fetching farm data…</Text>
         </View>
       </View>
     );

@@ -570,7 +570,7 @@ export default function DashboardScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.titleBlock}>
-          <Text style={styles.title}>Microclimate</Text>
+          <Text style={styles.title}>FarmPal</Text>
           <Text style={styles.subtitle}>
             {locationLabel ? locationLabel : t("appSubtitle")}
           </Text>

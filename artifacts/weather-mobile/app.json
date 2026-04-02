@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Microclimate",
+    "name": "FarmPal",
     "slug": "weather-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -37,7 +37,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Microclimate to use your location for local weather and rain prediction."
+          "locationWhenInUsePermission": "Allow FarmPal to use your location for local weather and rain prediction."
         }
       ]
     ],

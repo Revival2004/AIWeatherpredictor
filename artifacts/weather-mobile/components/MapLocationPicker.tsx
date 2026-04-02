@@ -84,7 +84,7 @@ const MAP_HTML = `<!DOCTYPE html>
     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'pin', lat: lat, lon: lon }));
 
     fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&zoom=14&addressdetails=1', {
-      headers: { 'Accept-Language': 'en', 'User-Agent': 'MicroclimateApp/1.0' }
+      headers: { 'Accept-Language': 'en', 'User-Agent': 'FarmPalApp/1.0' }
     })
     .then(function(r){ return r.json(); })
     .then(function(data){
