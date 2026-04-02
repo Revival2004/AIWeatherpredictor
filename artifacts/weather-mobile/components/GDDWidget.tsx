@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useColorScheme } from "react-native";
@@ -103,14 +104,21 @@ export default function GDDWidget({ cumulativeGDD, irrigationDeficit, cropName =
         </Text>
       )}
       {!next && (
-        <Text style={[styles.nextMilestone, { color: colorTokens.light.primary, fontWeight: "700" }]}>
-          🌾 Crop has reached maturity GDD threshold
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Feather name="check-circle" size={14} color={colorTokens.light.primary} />
+          <Text style={[styles.nextMilestone, { color: colorTokens.light.primary, fontWeight: "700" }]}>
+            Crop has reached maturity GDD threshold
+          </Text>
+        </View>
       )}
 
       {/* Irrigation deficit */}
       <View style={[styles.irrigationRow, { borderTopColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }]}>
-        <Text style={styles.irrigationIcon}>{irrigationUrgent ? "🚨" : "💧"}</Text>
+        <Feather
+          name={irrigationUrgent ? "alert-triangle" : "droplet"}
+          size={18}
+          color={irrigationUrgent ? "#CC0000" : colorTokens.light.primary}
+        />
         <View style={styles.irrigationText}>
           <Text style={[styles.irrigationLabel, { color: colors.mutedForeground }]}>7-DAY IRRIGATION DEFICIT</Text>
           <Text style={[styles.irrigationValue, { color: irrigationUrgent ? "#CC0000" : colorTokens.light.primary }]}>

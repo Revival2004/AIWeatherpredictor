@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
-  Dimensions,
   Modal,
   Pressable,
   StyleSheet,
@@ -12,25 +12,31 @@ import { useColors } from "@/hooks/useColors";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const ONBOARDING_KEY = "microclimate_onboarding_v1";
-const { width } = Dimensions.get("window");
 
-const STEPS = [
+type Step = {
+  titleKey: "welcomeTitle" | "step2Title" | "step3Title";
+  bodyKey: "welcomeBody" | "step2Body" | "step3Body";
+  icon: keyof typeof Feather.glyphMap;
+  color: string;
+};
+
+const STEPS: Step[] = [
   {
-    titleKey: "welcomeTitle" as const,
-    bodyKey: "welcomeBody" as const,
-    icon: "🌦️",
+    titleKey: "welcomeTitle",
+    bodyKey: "welcomeBody",
+    icon: "cloud-rain",
     color: "#3B82F6",
   },
   {
-    titleKey: "step2Title" as const,
-    bodyKey: "step2Body" as const,
-    icon: "🗺️",
+    titleKey: "step2Title",
+    bodyKey: "step2Body",
+    icon: "map-pin",
     color: "#3D8B37",
   },
   {
-    titleKey: "step3Title" as const,
-    bodyKey: "step3Body" as const,
-    icon: "📊",
+    titleKey: "step3Title",
+    bodyKey: "step3Body",
+    icon: "bar-chart-2",
     color: "#8B5A2B",
   },
 ];
@@ -68,7 +74,7 @@ export default function OnboardingModal() {
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           {/* Icon */}
           <View style={[styles.iconWrap, { backgroundColor: `${current.color}18` }]}>
-            <Text style={styles.icon}>{current.icon}</Text>
+            <Feather name={current.icon} size={40} color={current.color} />
           </View>
 
           {/* Text */}
@@ -146,14 +152,13 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   iconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
   },
-  icon: { fontSize: 36 },
   title: {
     fontSize: 22,
     fontFamily: "Inter_700Bold",

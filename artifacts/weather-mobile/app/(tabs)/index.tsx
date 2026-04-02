@@ -575,39 +575,39 @@ export default function DashboardScreen() {
             {locationLabel ? locationLabel : t("appSubtitle")}
           </Text>
         </View>
-        <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
           {/* Language toggle */}
           <Pressable
-            style={[styles.locateBtn, { backgroundColor: `${colors.primary}22`, borderRadius: 12, width: 40, height: 40, justifyContent: "center", alignItems: "center" }]}
+            style={{ backgroundColor: `${colors.primary}22`, borderRadius: 10, width: 36, height: 36, justifyContent: "center", alignItems: "center" }}
             onPress={toggle}
             testID="language-toggle-btn"
           >
-            <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary }}>
+            <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: colors.primary }}>
               {LANG_LABELS[language]}
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.locateBtn, { backgroundColor: `${colors.primary}22`, borderRadius: 12, width: 40, height: 40, justifyContent: "center", alignItems: "center" }]}
+            style={{ backgroundColor: `${colors.primary}22`, borderRadius: 10, width: 36, height: 36, justifyContent: "center", alignItems: "center" }}
             onPress={() => setShowLocationPicker(true)}
             testID="search-location-btn"
           >
-            <Feather name="search" size={18} color={colors.primary} />
+            <Feather name="search" size={16} color={colors.primary} />
           </Pressable>
           <Pressable
-            style={[styles.locateBtn, { backgroundColor: `${colors.primary}22`, borderRadius: 12, width: 40, height: 40, justifyContent: "center", alignItems: "center" }]}
+            style={{ backgroundColor: `${colors.primary}22`, borderRadius: 10, width: 36, height: 36, justifyContent: "center", alignItems: "center" }}
             onPress={() => setShowMapPicker(true)}
             testID="map-location-btn"
           >
-            <Feather name="map" size={18} color={colors.primary} />
+            <Feather name="map" size={16} color={colors.primary} />
           </Pressable>
           <Pressable
-            style={styles.locateBtn}
+            style={{ backgroundColor: colors.primary, borderRadius: 10, width: 36, height: 36, justifyContent: "center", alignItems: "center" }}
             onPress={handleLocate}
             testID="locate-btn"
           >
             <Feather
               name={geoLoading ? "loader" : "map-pin"}
-              size={20}
+              size={17}
               color={colors.primaryForeground}
             />
           </Pressable>

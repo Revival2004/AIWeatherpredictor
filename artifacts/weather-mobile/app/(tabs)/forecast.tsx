@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
@@ -10,7 +11,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Location from "expo-location";
 import { useGetWeatherForecast, useGetWeatherAlerts, useGetLocations } from "@workspace/api-client-react";
 import { useColorScheme } from "react-native";
 import { useColors as useColorTokens } from "@/hooks/useColors";
@@ -22,7 +22,7 @@ import CropSelector from "@/components/CropSelector";
 import StormTimelineWidget from "@/components/StormTimelineWidget";
 
 const CROP_KEY = "selectedCrop";
-const LOC_KEY = "cachedLocation";
+const LAST_LOC_KEY = "microclimate_last_location_v1"; // same key as dashboard
 
 export default function ForecastScreen() {
   const colorScheme = useColorScheme();
@@ -46,39 +46,22 @@ export default function ForecastScreen() {
     requestLocation();
   }, []);
 
-  const KENYA_DEFAULT = { lat: -0.3031, lon: 36.08 }; // Nakuru, Kenya
+  const KENYA_DEFAULT = { lat: -0.3031, lon: 36.08 };
 
   const requestLocation = useCallback(async () => {
-    // Set an immediate default so the screen isn't blank while GPS resolves
-    const cached = await AsyncStorage.getItem(LOC_KEY).catch(() => null);
-    if (cached) {
-      setCoords(JSON.parse(cached));
-    } else {
-      setCoords(KENYA_DEFAULT);
-    }
-
+    // Use whatever the dashboard saved — exact same location the user set
     try {
-      if (Platform.OS === "web") {
-        navigator.geolocation?.getCurrentPosition(
-          (pos) => {
-            const c = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-            setCoords(c);
-            AsyncStorage.setItem(LOC_KEY, JSON.stringify(c)).catch(() => {});
-          },
-          () => {}, // Keep cached/default on failure
-          { timeout: 8000 }
-        );
-      } else {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") return;
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const c = { lat: loc.coords.latitude, lon: loc.coords.longitude };
-        setCoords(c);
-        AsyncStorage.setItem(LOC_KEY, JSON.stringify(c)).catch(() => {});
+      const raw = await AsyncStorage.getItem(LAST_LOC_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        // Format: { coords: { latitude, longitude }, label }
+        if (saved?.coords?.latitude != null) {
+          setCoords({ lat: saved.coords.latitude, lon: saved.coords.longitude });
+          return;
+        }
       }
-    } catch {
-      // Keep cached/default
-    }
+    } catch {}
+    setCoords(KENYA_DEFAULT);
   }, []);
 
   const { data: forecast, isLoading: forecastLoading, refetch: refetchForecast, error: forecastError } =
@@ -149,7 +132,7 @@ export default function ForecastScreen() {
           </View>
         ) : forecastError ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorIcon}>⚠️</Text>
+            <Feather name="alert-triangle" size={36} color="#F59E0B" />
             <Text style={[styles.errorText, { color: colors.text }]}>Could not load forecast.</Text>
             <Text style={[styles.errorSub, { color: colors.mutedForeground }]}>Pull down to retry.</Text>
           </View>

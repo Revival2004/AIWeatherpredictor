@@ -125,7 +125,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
             <View style={styles.pills}>
               {recentReports.rain > 0 && (
                 <View style={[styles.pill, { backgroundColor: "#EFF6FF" }]}>
-                  <Text style={styles.pillEmoji}>🌧️</Text>
+                  <Feather name="cloud-rain" size={12} color="#2563EB" />
                   <Text style={[styles.pillText, { color: "#2563EB" }]}>
                     {recentReports.rain} rain
                   </Text>
@@ -133,7 +133,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
               )}
               {recentReports.dry > 0 && (
                 <View style={[styles.pill, { backgroundColor: "#F0FDF4" }]}>
-                  <Text style={styles.pillEmoji}>☀️</Text>
+                  <Feather name="sun" size={12} color="#15803D" />
                   <Text style={[styles.pillText, { color: "#15803D" }]}>
                     {recentReports.dry} dry
                   </Text>
@@ -141,7 +141,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
               )}
               {recentReports.cloudy > 0 && (
                 <View style={[styles.pill, { backgroundColor: "#F8F8F8" }]}>
-                  <Text style={styles.pillEmoji}>⛅</Text>
+                  <Feather name="cloud" size={12} color="#6B7280" />
                   <Text style={[styles.pillText, { color: "#6B7280" }]}>
                     {recentReports.cloudy} cloudy
                   </Text>
