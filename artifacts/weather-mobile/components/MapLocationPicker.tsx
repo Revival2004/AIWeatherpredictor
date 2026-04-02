@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -63,9 +63,10 @@ const MAP_HTML = `<!DOCTYPE html>
 <div id="hint">Tap anywhere to drop a pin on your farm</div>
 <script>
   var map = L.map('map', { zoomControl: true }).setView([0.2, 37.9], 6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap',
-    maxZoom: 18
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19
   }).addTo(map);
 
   var marker = null;

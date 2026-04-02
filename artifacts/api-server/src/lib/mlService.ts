@@ -143,7 +143,9 @@ export async function predictRain(
   pressure: number,
   windspeed: number,
   weathercode: number,
-  timestamp: Date = new Date()
+  timestamp: Date = new Date(),
+  lat?: number,
+  lon?: number,
 ): Promise<MLPrediction> {
   const hour = timestamp.getHours();
   const month = timestamp.getMonth() + 1;
@@ -162,6 +164,8 @@ export async function predictRain(
         is_raining_now: isRainingNow,
         hour,
         month,
+        lat: lat ?? 0.0,
+        lon: lon ?? 37.5,
       }),
     });
   } catch {

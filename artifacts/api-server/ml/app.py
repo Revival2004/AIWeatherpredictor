@@ -2,6 +2,7 @@ import os
 import math
 import json
 import logging
+import time as _time
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, timedelta
@@ -36,6 +37,9 @@ def extract_features(row: dict) -> list:
     pressure = float(row.get("pressure", 1013) or 1013)
     windspeed = float(row.get("windspeed", 0) or 0)
     is_raining_now = 1.0 if row.get("is_raining_now") else 0.0
+    # Location features — Kenya range: lat -5..5, lon 33..42
+    lat = float(row.get("lat", 0.0) or 0.0)
+    lon = float(row.get("lon", 37.5) or 37.5)
     return [
         temperature,
         humidity,
@@ -46,6 +50,8 @@ def extract_features(row: dict) -> list:
         math.cos(2 * math.pi * hour / 24),
         math.sin(2 * math.pi * month / 12),
         math.cos(2 * math.pi * month / 12),
+        lat,
+        lon,
     ]
 
 
@@ -66,6 +72,8 @@ def train():
                 w.pressure,
                 w.windspeed,
                 w.weathercode,
+                w.latitude  AS lat,
+                w.longitude AS lon,
                 EXTRACT(HOUR  FROM w.created_at) AS hour,
                 EXTRACT(MONTH FROM w.created_at) AS month,
                 (w.weathercode IN (51,53,55,61,63,65,71,73,75,80,81,82,95,96,99)) AS is_raining_now,
@@ -238,8 +246,8 @@ KENYA_FARM_LOCATIONS = [
 ]
 
 
-def fetch_historical_location(lat: float, lon: float, start_date: str, end_date: str) -> list:
-    """Fetch hourly weather history from Open-Meteo archive for one location."""
+def fetch_historical_location(lat: float, lon: float, start_date: str, end_date: str, retries: int = 3) -> dict:
+    """Fetch hourly weather history from Open-Meteo archive. Retries on 429."""
     url = (
         f"https://archive-api.open-meteo.com/v1/archive"
         f"?latitude={lat}&longitude={lon}"
@@ -247,14 +255,24 @@ def fetch_historical_location(lat: float, lon: float, start_date: str, end_date:
         f"&hourly=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,weather_code"
         f"&timezone=Africa%2FNairobi"
     )
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "MicroclimateKE/1.0"})
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            data = json.loads(resp.read().decode())
-        return data.get("hourly", {})
-    except Exception as exc:
-        log.warning("Failed to fetch historical data from %s: %s", url, exc)
-        return {}
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "MicroclimateKE/1.0"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode())
+            return data
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < retries - 1:
+                wait = 5 * (attempt + 1)
+                log.warning("Rate limited (429) for lat=%.4f lon=%.4f — retrying in %ds", lat, lon, wait)
+                _time.sleep(wait)
+            else:
+                log.warning("Failed to fetch historical data for lat=%.4f lon=%.4f: %s", lat, lon, exc)
+                return {}
+        except Exception as exc:
+            log.warning("Failed to fetch historical data for lat=%.4f lon=%.4f: %s", lat, lon, exc)
+            return {}
+    return {}
 
 
 @app.route("/bootstrap", methods=["POST"])
@@ -281,10 +299,14 @@ def bootstrap():
         locations_ok = 0
 
         for loc in locations:
-            hourly = fetch_historical_location(loc["lat"], loc["lon"], start_date, end_date)
-            if not hourly or "time" not in hourly:
+            api_resp = fetch_historical_location(loc["lat"], loc["lon"], start_date, end_date)
+            if not api_resp or "hourly" not in api_resp:
                 log.warning("No data for %s", loc["name"])
                 continue
+
+            hourly = api_resp["hourly"]
+            loc_lat = float(api_resp.get("latitude", loc["lat"]))
+            loc_lon = float(api_resp.get("longitude", loc["lon"]))
 
             times   = hourly.get("time", [])
             temps   = hourly.get("temperature_2m", [])
@@ -315,6 +337,8 @@ def bootstrap():
                     math.cos(2 * math.pi * dt_hour / 24),
                     math.sin(2 * math.pi * dt_mon  / 12),
                     math.cos(2 * math.pi * dt_mon  / 12),
+                    loc_lat,
+                    loc_lon,
                 ])
                 all_y.append(rained_2h)
                 pairs += 1

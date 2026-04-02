@@ -122,7 +122,10 @@ export async function collectAllLocations(logger?: Logger): Promise<CollectionRe
         weatherData.humidity,
         weatherData.pressure,
         weatherData.windspeed,
-        weatherData.weathercode
+        weatherData.weathercode,
+        new Date(),
+        location.latitude,
+        location.longitude,
       );
 
       const targetTime = new Date(Date.now() + 2 * 60 * 60 * 1000);

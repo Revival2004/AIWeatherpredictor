@@ -14,6 +14,7 @@ export interface OpenMeteoCurrentWeather {
 export interface OpenMeteoResponse {
   latitude: number;
   longitude: number;
+  elevation?: number;
   current_weather: OpenMeteoCurrentWeather;
   hourly: {
     time: string[];
@@ -29,6 +30,7 @@ export interface WeatherResult {
   pressure: number;
   weathercode: number;
   time: string;
+  elevation?: number;
 }
 
 /**
@@ -80,5 +82,6 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherRes
     pressure,
     weathercode: current.weathercode,
     time: current.time,
+    elevation: data.elevation,
   };
 }

@@ -1,9 +1,12 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
+import OnboardingModal from "@/components/OnboardingModal";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Platform,
   Pressable,
@@ -31,31 +34,34 @@ interface Coords {
   longitude: number;
 }
 
-function getFarmingTip(data: WeatherPredictionResponse | undefined): string | null {
+type TipFn = (key: import("@/constants/translations").TranslationKey) => string;
+
+function getFarmingTip(data: WeatherPredictionResponse | undefined, t: TipFn): string | null {
   if (!data) return null;
   const { weather, prediction } = data;
   if (!prediction) return null;
   const pred = prediction.prediction;
   if (pred.includes("Rain") || pred.includes("Storm") || pred.includes("Thunder")) {
-    return "Hold off on irrigation — precipitation expected. Harvest or protect sensitive crops before rain arrives.";
+    return t("tipIrrigation");
   }
   if (pred === "Frost Risk") {
-    return "Frost risk tonight. Cover frost-sensitive plants and disconnect irrigation lines.";
+    return t("tipFrost");
   }
   if (weather.humidity < 30) {
-    return "Very low humidity. Increase irrigation frequency and watch for drought stress in crops.";
+    return t("tipDry");
   }
   if (weather.windspeed > 30) {
-    return "Strong winds expected. Secure loose structures, polytunnels, and lightweight equipment.";
+    return t("tipWind");
   }
   if (weather.temperature > 35) {
-    return "Extreme heat today. Irrigate in the early morning or evening to reduce heat stress.";
+    return t("tipHeat");
   }
-  return "Conditions look favorable for outdoor farm work today.";
+  return t("tipGood");
 }
 
 function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
   const colors = useColors();
+  const { t } = useLanguage();
   const willRain = data.predictionValue === "yes";
   const pct = Math.round(data.probability * 100);
   const confPct = Math.round(data.confidence * 100);
@@ -105,10 +111,10 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
           </View>
           <View>
             <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: colors.foreground }}>
-              {willRain ? "Rain expected in 2h" : "No rain in next 2h"}
+              {willRain ? t("rainExpected") : t("noRain")}
             </Text>
             <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-              AI ensemble prediction · {confPct}% confidence
+              {t("aiPrediction")} · {confPct}% {t("confidence")}
             </Text>
           </View>
         </View>
@@ -152,10 +158,10 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
           }}
         >
           <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-            No rain
+            {t("noRainLabel")}
           </Text>
           <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-            Rain
+            {t("rainLabel")}
           </Text>
         </View>
       </View>
@@ -209,9 +215,12 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
   );
 }
 
+const CACHE_KEY_PREFIX = "weather_cache_v1_";
+
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { t, toggle } = useLanguage();
   const [coords, setCoords] = useState<Coords | null>(null);
   const [fetchEnabled, setFetchEnabled] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -219,6 +228,8 @@ export default function DashboardScreen() {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
+  const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   const {
     data: weatherData,
@@ -296,6 +307,29 @@ export default function DashboardScreen() {
       setGeoLoading(false);
     }
   };
+
+  // Offline caching — save good data, restore when offline
+  useEffect(() => {
+    if (!coords) return;
+    const key = `${CACHE_KEY_PREFIX}${coords.latitude.toFixed(3)}_${coords.longitude.toFixed(3)}`;
+    AsyncStorage.getItem(key).then((raw) => {
+      if (raw) {
+        try { setCachedData(JSON.parse(raw)); } catch {}
+      }
+    });
+  }, [coords]);
+
+  useEffect(() => {
+    if (!coords || !weatherData) return;
+    const key = `${CACHE_KEY_PREFIX}${coords.latitude.toFixed(3)}_${coords.longitude.toFixed(3)}`;
+    const payload = { weather: weatherData, rain: rainData ?? null, ts: Date.now() };
+    AsyncStorage.setItem(key, JSON.stringify(payload));
+    setIsOffline(false);
+  }, [weatherData, rainData]);
+
+  useEffect(() => {
+    if (weatherError && cachedData) setIsOffline(true);
+  }, [weatherError, cachedData]);
 
   const isLoading = geoLoading || weatherLoading;
 
@@ -404,7 +438,7 @@ export default function DashboardScreen() {
     },
   });
 
-  const farmingTip = getFarmingTip(weatherData);
+  const farmingTip = getFarmingTip(weatherData, t);
 
   return (
     <View style={styles.container}>
@@ -412,10 +446,20 @@ export default function DashboardScreen() {
         <View style={styles.titleBlock}>
           <Text style={styles.title}>Microclimate</Text>
           <Text style={styles.subtitle}>
-            {locationLabel ? locationLabel : "AI Weather Predictor"}
+            {locationLabel ? locationLabel : t("appSubtitle")}
           </Text>
         </View>
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+          {/* Language toggle */}
+          <Pressable
+            style={[styles.locateBtn, { backgroundColor: `${colors.primary}22`, borderRadius: 12, width: 40, height: 40, justifyContent: "center", alignItems: "center" }]}
+            onPress={toggle}
+            testID="language-toggle-btn"
+          >
+            <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.primary }}>
+              {t("language") === "English" ? "EN" : "SW"}
+            </Text>
+          </Pressable>
           <Pressable
             style={[styles.locateBtn, { backgroundColor: `${colors.primary}22`, borderRadius: 12, width: 40, height: 40, justifyContent: "center", alignItems: "center" }]}
             onPress={() => setShowLocationPicker(true)}
@@ -443,6 +487,19 @@ export default function DashboardScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* Offline banner */}
+      {isOffline && cachedData && (
+        <View style={{ backgroundColor: "#8B5A2B", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Feather name="wifi-off" size={13} color="#fff" />
+          <Text style={{ color: "#fff", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
+            {t("offlineBanner")} · {Math.round((Date.now() - (cachedData.ts ?? 0)) / 60000)}m ago
+          </Text>
+        </View>
+      )}
+
+      {/* Onboarding */}
+      <OnboardingModal />
 
       {/* Kenya Location Picker (browse/search by county) */}
       <KenyaLocationPicker
