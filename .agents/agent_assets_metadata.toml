@@ -1,8 +1,13 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "Y2MQXxJfLyzTvqFqQtfhd"
 uri = "file://artifacts/weather-mobile/assets/images/icon.png"
 type = "image"
 title = "microclimate leaf weather icon"
+
+[[outputs]]
+id = "v30IVEsoA_028t0ZV0pf6"
+uri = "file://microclimate-source.zip"
+type = "unspecified"
+title = "Microclimate AI — Full Source Code"
