@@ -14,11 +14,17 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "YOUR_PROJECT.replit.app"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "YOUR_PROJECT.replit.app"
+      },
       "android": {
         "buildType": "app-bundle"
       },
