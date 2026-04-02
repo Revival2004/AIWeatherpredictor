@@ -29,9 +29,14 @@ import {
   getGetLocationsQueryKey,
   getGetMetricsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { StatsPanel } from "@/components/StatsPanel";
 import { useColors } from "@/hooks/useColors";
+
+function getApiBase() {
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
+  return domain ? `https://${domain}` : "http://localhost:8080";
+}
 
 export default function StatsScreen() {
   const colors = useColors();
@@ -99,6 +104,30 @@ export default function StatsScreen() {
       },
       onError: () => Alert.alert("Error", "Training failed. Need more weather data first."),
     },
+  });
+
+  const bootstrapMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${getApiBase()}/api/bootstrap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ monthsBack: 12 }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Bootstrap failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: getGetMetricsQueryKey() });
+      Alert.alert(
+        "Historical data loaded",
+        data.message ?? `Model trained on ${data.trainingSamples?.toLocaleString()} samples.`
+      );
+    },
+    onError: (err: Error) =>
+      Alert.alert("Bootstrap failed", err.message ?? "Could not fetch historical data."),
   });
 
   function handleAddLocation() {
@@ -469,6 +498,60 @@ export default function StatsScreen() {
               <Feather name="cpu" size={14} color="#fff" />
             )}
             <Text style={styles.actionBtnText}>Train Model</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Bootstrap from Kenya historical data */}
+        <View style={{
+          marginHorizontal: 20,
+          marginTop: 10,
+          padding: 14,
+          backgroundColor: `${colors.primary}10`,
+          borderRadius: 14,
+          borderWidth: 1,
+          borderColor: `${colors.primary}30`,
+        }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <Feather name="database" size={14} color={colors.primary} />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.primary }}>
+              Seed with Kenya Historical Data
+            </Text>
+          </View>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 10, lineHeight: 17 }}>
+            Downloads 12 months of real weather records for 8 major Kenyan farming regions from the Open-Meteo archive and trains the model immediately — so rain predictions work from day one, before your farm has collected its own data.
+          </Text>
+          <TouchableOpacity
+            style={[styles.actionBtn, {
+              backgroundColor: bootstrapMutation.isPending ? colors.muted : colors.primary,
+              alignSelf: "flex-start",
+              paddingHorizontal: 16,
+            }]}
+            onPress={() => {
+              Alert.alert(
+                "Seed with Historical Data?",
+                "This will fetch ~60,000 hourly readings from Open-Meteo for Nakuru, Eldoret, Kisumu, Meru, Kericho, Kitale, Nairobi and Embu (last 12 months) and train the model. Takes about 1–2 minutes.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Proceed", onPress: () => bootstrapMutation.mutate() },
+                ]
+              );
+            }}
+            disabled={bootstrapMutation.isPending}
+            activeOpacity={0.8}
+          >
+            {bootstrapMutation.isPending ? (
+              <>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.actionBtnText, { color: colors.primary }]}>Fetching Kenya data…</Text>
+              </>
+            ) : (
+              <>
+                <Feather name="download" size={14} color="#fff" />
+                <Text style={styles.actionBtnText}>
+                  {bootstrapMutation.isSuccess ? "Re-seed Historical Data" : "Seed Historical Data"}
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
 

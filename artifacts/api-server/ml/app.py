@@ -2,7 +2,9 @@ import os
 import math
 import json
 import logging
-from datetime import datetime, timezone
+import urllib.request
+import urllib.error
+from datetime import datetime, timezone, timedelta
 
 import numpy as np
 import psycopg2
@@ -219,6 +221,177 @@ def predict():
 
     except Exception as exc:
         log.exception("Predict failed")
+        return jsonify({"error": str(exc)}), 500
+
+
+RAIN_CODES = {51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99}
+
+KENYA_FARM_LOCATIONS = [
+    {"name": "Nakuru",  "lat": -0.3031, "lon": 36.0800},   # Rift Valley – grain & wheat
+    {"name": "Eldoret", "lat":  0.5143, "lon": 35.2698},   # Uasin Gishu – maize breadbasket
+    {"name": "Kisumu",  "lat": -0.0917, "lon": 34.7679},   # Nyanza – sugarcane & fish
+    {"name": "Meru",    "lat":  0.0500, "lon": 37.6496},   # Eastern – coffee & miraa
+    {"name": "Kericho", "lat": -0.3686, "lon": 35.2864},   # Rift Valley – tea country
+    {"name": "Kitale",  "lat":  1.0155, "lon": 35.0062},   # Trans-Nzoia – maize & wheat
+    {"name": "Nairobi", "lat": -1.2921, "lon": 36.8219},   # Central – peri-urban
+    {"name": "Embu",    "lat": -0.5310, "lon": 37.4500},   # Eastern – coffee & horticulture
+]
+
+
+def fetch_historical_location(lat: float, lon: float, start_date: str, end_date: str) -> list:
+    """Fetch hourly weather history from Open-Meteo archive for one location."""
+    url = (
+        f"https://archive-api.open-meteo.com/v1/archive"
+        f"?latitude={lat}&longitude={lon}"
+        f"&start_date={start_date}&end_date={end_date}"
+        f"&hourly=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,weather_code"
+        f"&timezone=Africa%2FNairobi"
+    )
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "MicroclimateKE/1.0"})
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            data = json.loads(resp.read().decode())
+        return data.get("hourly", {})
+    except Exception as exc:
+        log.warning("Failed to fetch historical data from %s: %s", url, exc)
+        return {}
+
+
+@app.route("/bootstrap", methods=["POST"])
+def bootstrap():
+    """
+    Fetch 12 months of Open-Meteo historical data for key Kenyan farming locations,
+    build labeled training pairs (weather at T → did it rain at T+2h?), and train
+    the ensemble so the model is useful from day one.
+    """
+    try:
+        body = request.get_json(force=True) or {}
+        months_back = int(body.get("monthsBack", 12))
+        locations = body.get("locations", KENYA_FARM_LOCATIONS)
+
+        end_dt   = datetime.now() - timedelta(days=2)   # archive lags ~2 days
+        start_dt = end_dt - timedelta(days=30 * months_back)
+        start_date = start_dt.strftime("%Y-%m-%d")
+        end_date   = end_dt.strftime("%Y-%m-%d")
+
+        log.info("Bootstrap: fetching %d months from %s to %s for %d locations",
+                 months_back, start_date, end_date, len(locations))
+
+        all_X, all_y = [], []
+        locations_ok = 0
+
+        for loc in locations:
+            hourly = fetch_historical_location(loc["lat"], loc["lon"], start_date, end_date)
+            if not hourly or "time" not in hourly:
+                log.warning("No data for %s", loc["name"])
+                continue
+
+            times   = hourly.get("time", [])
+            temps   = hourly.get("temperature_2m", [])
+            humids  = hourly.get("relative_humidity_2m", [])
+            presss  = hourly.get("pressure_msl", [])
+            winds   = hourly.get("wind_speed_10m", [])
+            codes   = hourly.get("weather_code", [])
+
+            n = len(times)
+            pairs = 0
+            for i in range(n - 2):
+                t  = temps[i];  h  = humids[i]
+                p  = presss[i]; w  = winds[i]; c = codes[i]
+                c2 = codes[i + 2]
+
+                if any(v is None for v in [t, h, p, w, c, c2]):
+                    continue
+
+                dt_hour = int(times[i][11:13]) if len(times[i]) >= 13 else 0
+                dt_mon  = int(times[i][5:7])   if len(times[i]) >= 7  else 6
+
+                is_raining_now = 1.0 if int(c) in RAIN_CODES else 0.0
+                rained_2h      = 1.0 if int(c2) in RAIN_CODES else 0.0
+
+                all_X.append([
+                    float(t), float(h), float(p), float(w), is_raining_now,
+                    math.sin(2 * math.pi * dt_hour / 24),
+                    math.cos(2 * math.pi * dt_hour / 24),
+                    math.sin(2 * math.pi * dt_mon  / 12),
+                    math.cos(2 * math.pi * dt_mon  / 12),
+                ])
+                all_y.append(rained_2h)
+                pairs += 1
+
+            log.info("  %-10s  %d pairs (rain=%.1f%%)", loc["name"], pairs,
+                     100 * sum(1 for y in all_y[-pairs:] if y) / max(pairs, 1))
+            if pairs > 0:
+                locations_ok += 1
+
+        total = len(all_X)
+        if total < 10:
+            return jsonify({"error": f"Not enough data fetched ({total} pairs). Check connectivity."}), 400
+
+        X = np.array(all_X)
+        y = np.array(all_y)
+
+        if len(np.unique(y)) < 2:
+            return jsonify({"error": "Historical data only has one class — cannot train."}), 400
+
+        rain_pct = float(np.mean(y) * 100)
+        log.info("Training on %d total pairs (rain=%.1f%%)", total, rain_pct)
+
+        from sklearn.model_selection import train_test_split
+        X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.15, random_state=42, stratify=y)
+
+        lr = Pipeline([
+            ("scaler", StandardScaler()),
+            ("clf",    LogisticRegression(C=1.0, max_iter=1000, random_state=42)),
+        ])
+        rf = RandomForestClassifier(n_estimators=150, max_features="sqrt",
+                                    max_depth=10, n_jobs=-1, random_state=42)
+        gb = GradientBoostingClassifier(n_estimators=150, learning_rate=0.07,
+                                        max_depth=4, random_state=42)
+
+        lr.fit(X_tr, y_tr); rf.fit(X_tr, y_tr); gb.fit(X_tr, y_tr)
+
+        def acc(m): return round(float(np.mean(m.predict(X_te) == y_te)) * 100, 1)
+        lr_acc = acc(lr); rf_acc = acc(rf); gb_acc = acc(gb)
+
+        ens_proba = (lr.predict_proba(X_te)[:, 1] + rf.predict_proba(X_te)[:, 1]
+                     + gb.predict_proba(X_te)[:, 1]) / 3
+        ens_acc = round(float(np.mean((ens_proba >= 0.5) == y_te)) * 100, 1)
+
+        trained_at = datetime.now(timezone.utc).isoformat()
+        model_data = {
+            "version":         "sklearn_ensemble_v1",
+            "trainedAt":       trained_at,
+            "trainingSamples": total,
+            "accuracy":        ens_acc,
+            "lrAccuracy":      lr_acc,
+            "rfAccuracy":      rf_acc,
+            "gbAccuracy":      gb_acc,
+            "lr": lr, "rf": rf, "gb": gb,
+        }
+        joblib.dump(model_data, MODEL_PATH)
+        log.info("Bootstrap model saved → %s (ens=%.1f%%)", MODEL_PATH, ens_acc)
+
+        return jsonify({
+            "success":         True,
+            "trainingSamples": total,
+            "locationsUsed":   locations_ok,
+            "rainPercent":     round(rain_pct, 1),
+            "accuracy":        ens_acc,
+            "lrAccuracy":      lr_acc,
+            "rfAccuracy":      rf_acc,
+            "gbAccuracy":      gb_acc,
+            "monthsBack":      months_back,
+            "message": (
+                f"Model bootstrapped with {total:,} samples from {locations_ok} Kenyan "
+                f"farming regions ({months_back} months). "
+                f"Ensemble accuracy: {ens_acc}% "
+                f"(LR {lr_acc}%, RF {rf_acc}%, GB {gb_acc}%)"
+            ),
+        })
+
+    except Exception as exc:
+        log.exception("Bootstrap failed")
         return jsonify({"error": str(exc)}), 500
 
 

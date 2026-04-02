@@ -368,6 +368,38 @@ router.post("/train", async (req, res): Promise<void> => {
 });
 
 /**
+ * POST /bootstrap
+ * One-time operation: fetch 12 months of Open-Meteo historical data for 8 Kenyan
+ * farming regions, build labeled pairs, and train the ensemble — so predictions
+ * work from day one before real farm data has been collected.
+ */
+router.post("/bootstrap", async (req, res): Promise<void> => {
+  try {
+    const mlUrl = process.env.ML_SERVICE_URL ?? "http://localhost:5000";
+    req.log.info({ req: { id: (req as any).id, method: req.method, url: req.path } },
+      "Forwarding bootstrap request to Python sklearn service");
+
+    const body = req.body && Object.keys(req.body).length ? req.body : {};
+    const response = await fetch(`${mlUrl}/bootstrap`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5 * 60 * 1000),   // 5-min timeout — fetching ~8 locations
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      res.status(response.status).json(data);
+      return;
+    }
+    res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "Bootstrap failed");
+    res.status(500).json({ error: "Bootstrap failed. Check ML service and network access." });
+  }
+});
+
+/**
  * GET /weather/rain
  * Returns a rain prediction (yes/no + confidence) for a given lat/lon
  * using the current weather conditions and the trained ML model.
