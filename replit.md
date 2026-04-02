@@ -12,7 +12,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
 - **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`import { z } from "zod"` — NOT `zod/v4`), `drizzle-zod`
+- **Validation**: Zod (`import { z } from "zod"` — NOT `zod/v4`); lib/db schema types use Drizzle's native `$inferInsert` / `$inferSelect` (drizzle-zod removed — incompatible with zod v4)
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 - **Scheduler**: node-cron (hourly weather collection + feedback loop)

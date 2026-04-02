@@ -30,13 +30,13 @@ args = "ML Service: Python sklearn"
 name = "ML Service: Python sklearn"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python3 artifacts/api-server/ml/app.py"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "/home/runner/workspace/.pythonlibs/bin/python3.11 artifacts/api-server/ml/app.py"
+waitForPort = 5000
 
 [agent]
 stack = "PNPM_WORKSPACE"
@@ -48,4 +48,4 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
-packages = ["glibcLocales"]
+packages = ["glibcLocales", "yakut"]

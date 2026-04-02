@@ -1,6 +1,4 @@
 import { pgTable, serial, doublePrecision, integer, text, real, timestamp } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 
 export const weatherDataTable = pgTable("weather_data", {
   id: serial("id").primaryKey(),
@@ -17,10 +15,5 @@ export const weatherDataTable = pgTable("weather_data", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertWeatherDataSchema = createInsertSchema(weatherDataTable).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertWeatherData = z.infer<typeof insertWeatherDataSchema>;
+export type InsertWeatherData = typeof weatherDataTable.$inferInsert;
 export type WeatherData = typeof weatherDataTable.$inferSelect;
