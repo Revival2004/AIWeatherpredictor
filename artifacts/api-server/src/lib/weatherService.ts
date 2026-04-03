@@ -31,6 +31,7 @@ export interface WeatherResult {
   weathercode: number;
   time: string;
   elevation?: number;
+  estimated?: boolean;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -99,5 +100,16 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherRes
     };
   }
 
-  throw lastError;
+  // All retries exhausted — return typical Kenyan highland values so the
+  // rest of the pipeline (ML prediction, history lookup) can still run.
+  // The response will be marked as estimated so the UI can indicate this.
+  return {
+    temperature: 20,
+    windspeed: 14,
+    humidity: 65,
+    pressure: 875,
+    weathercode: 1,
+    time: new Date().toISOString(),
+    estimated: true,
+  };
 }
