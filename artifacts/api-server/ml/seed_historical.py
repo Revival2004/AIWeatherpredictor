@@ -2,8 +2,8 @@
 FarmPal Historical Weather Seed
 ---------------------------------
 Fetches 10 full years (2015-2024) of real hourly weather data from
-Open-Meteo's free historical archive for all 47 Kenyan county seats
-plus key agricultural towns — ~4.1 million labeled rows total.
+Open-Meteo's free historical archive for 61 Kenyan farming locations
+covering all counties and key agricultural towns — ~5.3 million labeled rows total.
 
 Coverage includes every Kenyan climate zone:
   - Coast (Mombasa, Malindi, Lamu, Kwale, Kilifi)
@@ -45,72 +45,82 @@ if not DATABASE_URL:
     print("ERROR: DATABASE_URL environment variable is not set.")
     sys.exit(1)
 
-# ── All 47 Kenyan counties + key agricultural towns ──────────────────────────
+# ── 61 Kenyan locations — all major counties + key agricultural towns ─────────
 LOCATIONS = [
-    # Nairobi & Central
-    {"name": "Nairobi",          "lat": -1.2921, "lon": 36.8219},
-    {"name": "Thika",            "lat": -1.0332, "lon": 37.0693},
-    {"name": "Nyeri",            "lat": -0.4167, "lon": 36.9500},
-    {"name": "Kerugoya",         "lat": -0.4913, "lon": 37.2823},
-    {"name": "Murang'a",         "lat": -0.7176, "lon": 37.1524},
-    {"name": "Ol Kalou",         "lat": -0.2682, "lon": 36.3786},
-    {"name": "Nyahururu",        "lat": -0.0256, "lon": 36.3636},
+    # Rift Valley — wheat, maize, pyrethrum, tea
+    {"name": "Nakuru",       "lat": -0.3031, "lon": 36.0800},
+    {"name": "Eldoret",      "lat":  0.5143, "lon": 35.2698},
+    {"name": "Kericho",      "lat": -0.3686, "lon": 35.2864},
+    {"name": "Kitale",       "lat":  1.0155, "lon": 35.0062},
+    {"name": "Narok",        "lat": -1.0769, "lon": 35.8710},
+    {"name": "Bomet",        "lat": -0.7844, "lon": 35.3420},
+    {"name": "Iten",         "lat":  0.6704, "lon": 35.5083},
+    {"name": "Molo",         "lat": -0.2506, "lon": 35.7323},
+    {"name": "Nandi Hills",  "lat":  0.1030, "lon": 35.1872},
+    {"name": "Sotik",        "lat": -0.6793, "lon": 35.1208},
+    {"name": "Kabarnet",     "lat":  0.4918, "lon": 35.7406},
+    {"name": "Kapenguria",   "lat":  1.2393, "lon": 35.1128},
+    {"name": "Lodwar",       "lat":  3.1193, "lon": 35.5966},
+    {"name": "Maralal",      "lat":  1.0988, "lon": 36.7022},
+    {"name": "Kapsabet",     "lat":  0.2027, "lon": 35.0993},
 
-    # Rift Valley
-    {"name": "Nakuru",           "lat": -0.3031, "lon": 36.0800},
-    {"name": "Narok",            "lat": -1.0813, "lon": 35.8714},
-    {"name": "Kajiado",          "lat": -1.8500, "lon": 36.7765},
-    {"name": "Nanyuki",          "lat":  0.0174, "lon": 37.0740},
-    {"name": "Kabarnet",         "lat":  0.4915, "lon": 35.7432},
-    {"name": "Kericho",          "lat": -0.3690, "lon": 35.2863},
-    {"name": "Bomet",            "lat": -0.7831, "lon": 35.3413},
+    # Central Kenya — coffee, tea, horticulture, dairy
+    {"name": "Nairobi",      "lat": -1.2921, "lon": 36.8219},
+    {"name": "Thika",        "lat": -1.0332, "lon": 37.0693},
+    {"name": "Nyeri",        "lat": -0.4169, "lon": 36.9513},
+    {"name": "Kerugoya",     "lat": -0.4913, "lon": 37.2823},
+    {"name": "Muranga",      "lat": -0.7212, "lon": 37.1526},
+    {"name": "Kiambu",       "lat": -1.1714, "lon": 36.8352},
+    {"name": "Limuru",       "lat": -1.1163, "lon": 36.6413},
+    {"name": "Nanyuki",      "lat":  0.0142, "lon": 37.0741},
+    {"name": "Nyahururu",    "lat":  0.0270, "lon": 36.3622},
+    {"name": "Ol Kalou",     "lat":  0.2639, "lon": 36.3838},
+    {"name": "Githunguri",   "lat": -1.0617, "lon": 36.7128},
 
-    # North Rift
-    {"name": "Eldoret",          "lat":  0.5143, "lon": 35.2698},
-    {"name": "Kitale",           "lat":  1.0154, "lon": 35.0062},
-    {"name": "Kapenguria",       "lat":  1.2388, "lon": 35.1126},
-    {"name": "Lodwar",           "lat":  3.1193, "lon": 35.5966},
-    {"name": "Maralal",          "lat":  1.0988, "lon": 36.7022},
-    {"name": "Iten",             "lat":  0.6702, "lon": 35.5082},
-    {"name": "Kapsabet",         "lat":  0.2027, "lon": 35.0993},
+    # Eastern Kenya — coffee, miraa, mango, lower rainfall zones
+    {"name": "Meru",         "lat":  0.0500, "lon": 37.6496},
+    {"name": "Chuka",        "lat": -0.3333, "lon": 37.6500},
+    {"name": "Embu",         "lat": -0.5310, "lon": 37.4500},
+    {"name": "Machakos",     "lat": -1.5177, "lon": 37.2634},
+    {"name": "Kitui",        "lat": -1.3666, "lon": 38.0123},
+    {"name": "Mwingi",       "lat": -0.9310, "lon": 38.0648},
+    {"name": "Makueni",      "lat": -1.8044, "lon": 37.6241},
+    {"name": "Kibwezi",      "lat": -2.4063, "lon": 37.9521},
 
-    # Western / Lake Victoria
-    {"name": "Kisumu",           "lat": -0.1022, "lon": 34.7617},
-    {"name": "Kakamega",         "lat":  0.2827, "lon": 34.7519},
-    {"name": "Bungoma",          "lat":  0.5635, "lon": 34.5606},
-    {"name": "Busia",            "lat":  0.4604, "lon": 34.1115},
-    {"name": "Siaya",            "lat": -0.0608, "lon": 34.2882},
-    {"name": "Vihiga",           "lat":  0.0700, "lon": 34.7231},
-    {"name": "Homa Bay",         "lat": -0.5273, "lon": 34.4571},
-    {"name": "Migori",           "lat": -1.0634, "lon": 34.4731},
-    {"name": "Kisii",            "lat": -0.6817, "lon": 34.7667},
-    {"name": "Nyamira",          "lat": -0.5669, "lon": 34.9356},
+    # Nyanza & Western — sugarcane, tea, rice, fishing
+    {"name": "Kisumu",       "lat": -0.0917, "lon": 34.7679},
+    {"name": "Kisii",        "lat": -0.6698, "lon": 34.7638},
+    {"name": "Kakamega",     "lat":  0.2827, "lon": 34.7519},
+    {"name": "Bungoma",      "lat":  0.5635, "lon": 34.5614},
+    {"name": "Busia",        "lat":  0.4604, "lon": 34.1115},
+    {"name": "Siaya",        "lat":  0.0625, "lon": 34.2879},
+    {"name": "Vihiga",       "lat":  0.0700, "lon": 34.7231},
+    {"name": "Migori",       "lat": -1.0634, "lon": 34.4731},
+    {"name": "Homa Bay",     "lat": -0.5194, "lon": 34.4571},
+    {"name": "Nyamira",      "lat": -0.5669, "lon": 34.9355},
 
-    # Eastern / Mt Kenya region
-    {"name": "Meru",             "lat":  0.0469, "lon": 37.6490},
-    {"name": "Chuka",            "lat": -0.3333, "lon": 37.6500},
-    {"name": "Embu",             "lat": -0.5273, "lon": 37.4584},
-    {"name": "Kitui",            "lat": -1.3671, "lon": 38.0107},
-    {"name": "Machakos",         "lat": -1.5177, "lon": 37.2634},
-    {"name": "Wote",             "lat": -1.7817, "lon": 37.6353},
-    {"name": "Isiolo",           "lat":  0.3542, "lon": 37.5820},
+    # South
+    {"name": "Kajiado",      "lat": -1.8510, "lon": 36.7761},
+    {"name": "Athi River",   "lat": -1.4522, "lon": 36.9786},
 
-    # ASAL North & North East
-    {"name": "Marsabit",         "lat":  2.3284, "lon": 37.9898},
-    {"name": "Garissa",          "lat": -0.4532, "lon": 39.6461},
-    {"name": "Wajir",            "lat":  1.7471, "lon": 40.0573},
-    {"name": "Mandera",          "lat":  3.9366, "lon": 41.8670},
-    {"name": "Moyale",           "lat":  3.5236, "lon": 39.0532},
-    {"name": "Hola",             "lat": -1.4806, "lon": 40.0305},
+    # Coast — cashew, coconut, rice, mangoes
+    {"name": "Mombasa",      "lat": -4.0435, "lon": 39.6682},
+    {"name": "Malindi",      "lat": -3.2136, "lon": 40.1090},
+    {"name": "Kilifi",       "lat": -3.6305, "lon": 39.8499},
+    {"name": "Kwale",        "lat": -4.1790, "lon": 39.4524},
+    {"name": "Voi",          "lat": -3.3960, "lon": 38.5582},
+    {"name": "Lamu",         "lat": -2.2694, "lon": 40.9027},
+    {"name": "Taita Taveta", "lat": -3.3167, "lon": 38.3500},
+    {"name": "Taveta",       "lat": -3.3963, "lon": 37.6856},
 
-    # Coast
-    {"name": "Mombasa",          "lat": -4.0435, "lon": 39.6682},
-    {"name": "Malindi",          "lat": -3.2175, "lon": 40.1169},
-    {"name": "Kilifi",           "lat": -3.6305, "lon": 39.8499},
-    {"name": "Kwale",            "lat": -4.1735, "lon": 39.4527},
-    {"name": "Lamu",             "lat": -2.2694, "lon": 40.9027},
-    {"name": "Voi",              "lat": -3.3964, "lon": 38.5566},
-    {"name": "Taveta",           "lat": -3.3963, "lon": 37.6856},
+    # Arid North — sorghum, pastoralism, flood recession farming
+    {"name": "Isiolo",       "lat":  0.3539, "lon": 37.5828},
+    {"name": "Marsabit",     "lat":  2.3313, "lon": 37.9927},
+    {"name": "Moyale",       "lat":  3.5236, "lon": 39.0532},
+    {"name": "Garissa",      "lat": -0.4532, "lon": 39.6461},
+    {"name": "Wajir",        "lat":  1.7471, "lon": 40.0573},
+    {"name": "Mandera",      "lat":  3.9366, "lon": 41.8670},
+    {"name": "Hola",         "lat": -1.4806, "lon": 40.0305},
 ]
 
 # 10 full years of hourly data per location

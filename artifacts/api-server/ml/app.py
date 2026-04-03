@@ -296,7 +296,7 @@ def predict():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 50 Kenyan farming locations across all major agricultural zones
+# 61 Kenyan farming locations across all major agricultural zones
 # ─────────────────────────────────────────────────────────────────────────────
 
 KENYA_FARM_LOCATIONS = [
@@ -313,10 +313,14 @@ KENYA_FARM_LOCATIONS = [
     {"name": "Sotik",        "lat": -0.6793, "lon": 35.1208},
     {"name": "Kabarnet",     "lat":  0.4918, "lon": 35.7406},
     {"name": "Kapenguria",   "lat":  1.2393, "lon": 35.1128},
+    {"name": "Lodwar",       "lat":  3.1193, "lon": 35.5966},
+    {"name": "Maralal",      "lat":  1.0988, "lon": 36.7022},
+    {"name": "Kapsabet",     "lat":  0.2027, "lon": 35.0993},
     # Central Kenya — coffee, tea, horticulture, dairy
     {"name": "Nairobi",      "lat": -1.2921, "lon": 36.8219},
     {"name": "Thika",        "lat": -1.0332, "lon": 37.0693},
     {"name": "Nyeri",        "lat": -0.4169, "lon": 36.9513},
+    {"name": "Kerugoya",     "lat": -0.4913, "lon": 37.2823},
     {"name": "Muranga",      "lat": -0.7212, "lon": 37.1526},
     {"name": "Kiambu",       "lat": -1.1714, "lon": 36.8352},
     {"name": "Limuru",       "lat": -1.1163, "lon": 36.6413},
@@ -326,6 +330,7 @@ KENYA_FARM_LOCATIONS = [
     {"name": "Githunguri",   "lat": -1.0617, "lon": 36.7128},
     # Eastern Kenya — coffee, miraa, mango, lower rainfall zones
     {"name": "Meru",         "lat":  0.0500, "lon": 37.6496},
+    {"name": "Chuka",        "lat": -0.3333, "lon": 37.6500},
     {"name": "Embu",         "lat": -0.5310, "lon": 37.4500},
     {"name": "Machakos",     "lat": -1.5177, "lon": 37.2634},
     {"name": "Kitui",        "lat": -1.3666, "lon": 38.0123},
@@ -337,7 +342,9 @@ KENYA_FARM_LOCATIONS = [
     {"name": "Kisii",        "lat": -0.6698, "lon": 34.7638},
     {"name": "Kakamega",     "lat":  0.2827, "lon": 34.7519},
     {"name": "Bungoma",      "lat":  0.5635, "lon": 34.5614},
+    {"name": "Busia",        "lat":  0.4604, "lon": 34.1115},
     {"name": "Siaya",        "lat":  0.0625, "lon": 34.2879},
+    {"name": "Vihiga",       "lat":  0.0700, "lon": 34.7231},
     {"name": "Migori",       "lat": -1.0634, "lon": 34.4731},
     {"name": "Homa Bay",     "lat": -0.5194, "lon": 34.4571},
     {"name": "Nyamira",      "lat": -0.5669, "lon": 34.9355},
@@ -347,16 +354,20 @@ KENYA_FARM_LOCATIONS = [
     # Coast — cashew, coconut, rice, mangoes
     {"name": "Mombasa",      "lat": -4.0435, "lon": 39.6682},
     {"name": "Malindi",      "lat": -3.2136, "lon": 40.1090},
+    {"name": "Kilifi",       "lat": -3.6305, "lon": 39.8499},
     {"name": "Kwale",        "lat": -4.1790, "lon": 39.4524},
     {"name": "Voi",          "lat": -3.3960, "lon": 38.5582},
     {"name": "Lamu",         "lat": -2.2694, "lon": 40.9027},
     {"name": "Taita Taveta", "lat": -3.3167, "lon": 38.3500},
+    {"name": "Taveta",       "lat": -3.3963, "lon": 37.6856},
     # Arid North — sorghum, pastoralism, flood recession
     {"name": "Isiolo",       "lat":  0.3539, "lon": 37.5828},
     {"name": "Marsabit",     "lat":  2.3313, "lon": 37.9927},
-    {"name": "Garissa",      "lat": -0.4532, "lon": 42.4848},
+    {"name": "Moyale",       "lat":  3.5236, "lon": 39.0532},
+    {"name": "Garissa",      "lat": -0.4532, "lon": 39.6461},  # fixed: was 42.4848 (Somalia)
     {"name": "Wajir",        "lat":  1.7471, "lon": 40.0573},
     {"name": "Mandera",      "lat":  3.9366, "lon": 41.8670},
+    {"name": "Hola",         "lat": -1.4806, "lon": 40.0305},
 ]
 
 RAIN_CODES = {51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99}
