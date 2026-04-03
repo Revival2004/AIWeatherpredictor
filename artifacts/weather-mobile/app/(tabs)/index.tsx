@@ -216,70 +216,96 @@ export default function DashboardScreen() {
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [feedbackPending, setFeedbackPending] = useState<PendingFeedback | null>(null);
+  const [locationUpdated, setLocationUpdated] = useState(false);
 
-  // On mount: restore last saved location OR try GPS → fallback to Nakuru
+  // Haversine distance in km between two coordinates
+  const distanceKm = (a: Coords, b: Coords): number => {
+    const R = 6371;
+    const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+    const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+    const sinLat = Math.sin(dLat / 2);
+    const sinLon = Math.sin(dLon / 2);
+    const chord =
+      sinLat * sinLat +
+      Math.cos((a.latitude * Math.PI) / 180) *
+        Math.cos((b.latitude * Math.PI) / 180) *
+        sinLon * sinLon;
+    return R * 2 * Math.atan2(Math.sqrt(chord), Math.sqrt(1 - chord));
+  };
+
+  // On mount: restore last saved location immediately, then silently re-check GPS.
+  // If farmer has moved >5 km since last save, auto-update their location.
   useEffect(() => {
-    AsyncStorage.getItem(LAST_LOC_KEY).then((raw) => {
-      if (raw) {
-        try {
-          const saved = JSON.parse(raw);
-          // If the saved label is our old hard-coded default, treat as no saved location
-          const isOldDefault = saved.label === "Nakuru, Kenya" || saved.label === KENYA_DEFAULT_LABEL;
-          if (!isOldDefault) {
-            setCoords(saved.coords);
-            setLocationLabel(saved.label ?? null);
-            setUsingDefault(false);
-            setFetchEnabled(true);
-            return;
-          }
-        } catch {}
-      }
+    let savedCoords: Coords | null = null;
 
-      // No saved location — try GPS first
-      setGeoLoading(true);
-
-      const applyGps = (c: Coords) => {
-        setCoords(c);
-        setLocationLabel(null);
-        setUsingDefault(false);
-        setFetchEnabled(true);
-        setGeoLoading(false);
-        AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
-      };
-
-      const applyDefault = () => {
-        setCoords(KENYA_DEFAULT_COORDS);
-        setLocationLabel(KENYA_DEFAULT_LABEL);
-        setUsingDefault(true);
-        setFetchEnabled(true);
-        setGeoLoading(false);
-      };
-
-      if (Platform.OS === "web") {
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-            () => applyDefault(),
-            { timeout: 8000 }
-          );
-        } else {
-          applyDefault();
-        }
-      } else {
-        Location.requestForegroundPermissionsAsync().then(({ status }) => {
-          if (status !== "granted") { applyDefault(); return; }
-          return Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        }).then((pos) => {
-          if (!pos) return;
-          applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-        }).catch(() => applyDefault());
-      }
-    }).catch(() => {
+    const applyDefault = () => {
       setCoords(KENYA_DEFAULT_COORDS);
       setLocationLabel(KENYA_DEFAULT_LABEL);
       setUsingDefault(true);
       setFetchEnabled(true);
-    });
+      setGeoLoading(false);
+    };
+
+    const applyGps = (c: Coords, silent = false) => {
+      if (silent && savedCoords) {
+        const moved = distanceKm(savedCoords, c);
+        if (moved < 5) return; // hasn't moved significantly — keep saved location
+        // Farmer has moved — update silently and show brief banner
+        setLocationUpdated(true);
+        setTimeout(() => setLocationUpdated(false), 4000);
+      }
+      setCoords(c);
+      setLocationLabel(null);
+      setUsingDefault(false);
+      setFetchEnabled(true);
+      setGeoLoading(false);
+      AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
+    };
+
+    const tryGps = (silent: boolean) => {
+      if (Platform.OS === "web") {
+        if (typeof navigator !== "undefined" && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, silent),
+            () => { if (!silent) applyDefault(); },
+            { timeout: 8000 }
+          );
+        } else {
+          if (!silent) applyDefault();
+        }
+      } else {
+        Location.requestForegroundPermissionsAsync().then(({ status }) => {
+          if (status !== "granted") { if (!silent) applyDefault(); return null; }
+          return Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        }).then((pos) => {
+          if (!pos) return;
+          applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, silent);
+        }).catch(() => { if (!silent) applyDefault(); });
+      }
+    };
+
+    AsyncStorage.getItem(LAST_LOC_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const saved = JSON.parse(raw);
+          const isOldDefault = saved.label === "Nakuru, Kenya" || saved.label === KENYA_DEFAULT_LABEL;
+          if (!isOldDefault && saved.coords) {
+            // Step 1: Show saved location immediately (fast)
+            savedCoords = saved.coords;
+            setCoords(saved.coords);
+            setLocationLabel(saved.label ?? null);
+            setUsingDefault(false);
+            setFetchEnabled(true);
+            // Step 2: Silently re-check GPS in background — auto-update if moved >5 km
+            tryGps(true);
+            return;
+          }
+        } catch {}
+      }
+      // No saved location — try GPS with loading indicator, fall back to Nakuru
+      setGeoLoading(true);
+      tryGps(false);
+    }).catch(() => applyDefault());
   }, []);
 
   const {
@@ -633,6 +659,16 @@ export default function DashboardScreen() {
           </Text>
           {!geoLoading && <Feather name="map-pin" size={13} color="#8B5A2B" />}
         </Pressable>
+      )}
+
+      {/* Location auto-updated banner */}
+      {locationUpdated && (
+        <View style={{ backgroundColor: "#3D8B37", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Feather name="map-pin" size={13} color="#fff" />
+          <Text style={{ color: "#fff", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
+            Location updated — your farm moved, showing new area
+          </Text>
+        </View>
       )}
 
       {/* Offline banner */}
