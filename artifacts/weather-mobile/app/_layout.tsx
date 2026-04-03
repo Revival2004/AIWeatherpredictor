@@ -19,7 +19,14 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { scheduleDailyFarmingReminder } from "@/services/NotificationService";
 
-setBaseUrl("https://FarmPal.replit.app");
+// EXPO_PUBLIC_DOMAIN is set in eas.json for production builds.
+// It can be a full URL (https://farmpal-api.onrender.com) or just a domain.
+// Falls back to the Replit preview URL for development.
+const _apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
+const _baseUrl = _apiDomain
+  ? (_apiDomain.startsWith("http") ? _apiDomain : `https://${_apiDomain}`)
+  : "https://FarmPal.replit.app";
+setBaseUrl(_baseUrl);
 
 SplashScreen.preventAutoHideAsync();
 
