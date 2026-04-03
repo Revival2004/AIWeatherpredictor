@@ -1,0 +1,61 @@
+ 50 Kenyan farming locations across all major agricultural zones
+# ─────────────────────────────────────────────────────────────────────────────
+
+KENYA_FARM_LOCATIONS = [
+    # Rift Valley — wheat, maize, pyrethrum, tea
+    {"name": "Nakuru",       "lat": -0.3031, "lon": 36.0800},
+    {"name": "Eldoret",      "lat":  0.5143, "lon": 35.2698},
+    {"name": "Kericho",      "lat": -0.3686, "lon": 35.2864},
+    {"name": "Kitale",       "lat":  1.0155, "lon": 35.0062},
+    {"name": "Narok",        "lat": -1.0769, "lon": 35.8710},
+    {"name": "Bomet",        "lat": -0.7844, "lon": 35.3420},
+    {"name": "Iten",         "lat":  0.6704, "lon": 35.5083},
+    {"name": "Molo",         "lat": -0.2506, "lon": 35.7323},
+    {"name": "Nandi Hills",  "lat":  0.1030, "lon": 35.1872},
+    {"name": "Sotik",        "lat": -0.6793, "lon": 35.1208},
+    {"name": "Kabarnet",     "lat":  0.4918, "lon": 35.7406},
+    {"name": "Kapenguria",   "lat":  1.2393, "lon": 35.1128},
+    # Central Kenya — coffee, tea, horticulture, dairy
+    {"name": "Nairobi",      "lat": -1.2921, "lon": 36.8219},
+    {"name": "Thika",        "lat": -1.0332, "lon": 37.0693},
+    {"name": "Nyeri",        "lat": -0.4169, "lon": 36.9513},
+    {"name": "Muranga",      "lat": -0.7212, "lon": 37.1526},
+    {"name": "Kiambu",       "lat": -1.1714, "lon": 36.8352},
+    {"name": "Limuru",       "lat": -1.1163, "lon": 36.6413},
+    {"name": "Nanyuki",      "lat":  0.0142, "lon": 37.0741},
+    {"name": "Nyahururu",    "lat":  0.0270, "lon": 36.3622},
+    {"name": "Ol Kalou",     "lat":  0.2639, "lon": 36.3838},
+    {"name": "Githunguri",   "lat": -1.0617, "lon": 36.7128},
+    # Eastern Kenya — coffee, miraa, mango, lower rainfall zones
+    {"name": "Meru",         "lat":  0.0500, "lon": 37.6496},
+    {"name": "Embu",         "lat": -0.5310, "lon": 37.4500},
+    {"name": "Machakos",     "lat": -1.5177, "lon": 37.2634},
+    {"name": "Kitui",        "lat": -1.3666, "lon": 38.0123},
+    {"name": "Mwingi",       "lat": -0.9310, "lon": 38.0648},
+    {"name": "Makueni",      "lat": -1.8044, "lon": 37.6241},
+    {"name": "Kibwezi",      "lat": -2.4063, "lon": 37.9521},
+    # Nyanza & Western — sugarcane, tea, rice, fishing
+    {"name": "Kisumu",       "lat": -0.0917, "lon": 34.7679},
+    {"name": "Kisii",        "lat": -0.6698, "lon": 34.7638},
+    {"name": "Kakamega",     "lat":  0.2827, "lon": 34.7519},
+    {"name": "Bungoma",      "lat":  0.5635, "lon": 34.5614},
+    {"name": "Siaya",        "lat":  0.0625, "lon": 34.2879},
+    {"name": "Migori",       "lat": -1.0634, "lon": 34.4731},
+    {"name": "Homa Bay",     "lat": -0.5194, "lon": 34.4571},
+    {"name": "Nyamira",      "lat": -0.5669, "lon": 34.9355},
+    # South
+    {"name": "Kajiado",      "lat": -1.8510, "lon": 36.7761},
+    {"name": "Athi River",   "lat": -1.4522, "lon": 36.9786},
+    # Coast — cashew, coconut, rice, mangoes
+    {"name": "Mombasa",      "lat": -4.0435, "lon": 39.6682},
+    {"name": "Malindi",      "lat": -3.2136, "lon": 40.1090},
+    {"name": "Kwale",        "lat": -4.1790, "lon": 39.4524},
+    {"name": "Voi",          "lat": -3.3960, "lon": 38.5582},
+    {"name": "Lamu",         "lat": -2.2694, "lon": 40.9027},
+    {"name": "Taita Taveta", "lat": -3.3167, "lon": 38.3500},
+    # Arid North — sorghum, pastoralism, flood recession
+    {"name": "Isiolo",       "lat":  0.3539, "lon": 37.5828},
+    {"name": "Marsabit",     "lat":  2.3313, "lon": 37.9927},
+    {"name": "Garissa",      "lat": -0.4532, "lon": 42.4848},
+    {"name": "Wajir",        "lat":  1.7471, "lon": 40.0573},
+    {"name": "Mandera",      "lat":  3.9366, "lon": 41.8670},
