@@ -11,7 +11,8 @@ echo "[FarmPal] Starting ML service (sklearn ensemble)..."
 cd "${WORKSPACE}/artifacts/api-server"
 ${PYTHON} -m gunicorn \
   --bind 0.0.0.0:5000 \
-  --workers 2 \
+  --workers 1 \
+  --timeout 300 \
   --daemon \
   --log-file /tmp/ml-service.log \
   --error-logfile /tmp/ml-error.log \

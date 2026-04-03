@@ -127,35 +127,174 @@ def start_bootstrap():
     })
 
 
-@app.route("/train", methods=["POST"])
-def train():
+_train_state: dict = {"running": False, "lastResult": None}
+
+
+def _do_train():
+    global _train_state
     try:
         conn = get_db()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Use LEAD() window function — orders of magnitude faster than a self-join.
+        # TABLESAMPLE gives a fast random sample without a full-table scan.
         cur.execute("""
-            SELECT
-                w.temperature,
-                w.humidity,
-                w.pressure,
-                w.windspeed,
-                w.weathercode,
-                w.latitude  AS lat,
-                w.longitude AS lon,
-                EXTRACT(HOUR  FROM w.created_at) AS hour,
-                EXTRACT(MONTH FROM w.created_at) AS month,
-                (w.weathercode IN (51,53,55,61,63,65,71,73,75,80,81,82,95,96,99)) AS is_raining_now,
-                (w2.weathercode IN (51,53,55,61,63,65,71,73,75,80,81,82,95,96,99)) AS rained_2h
-            FROM weather_data w
-            JOIN weather_data w2 ON (
-                ABS(w2.latitude  - w.latitude)  < 0.01
-                AND ABS(w2.longitude - w.longitude) < 0.01
-                AND w2.created_at >= w.created_at + INTERVAL '30 minutes'
-                AND w2.created_at <= w.created_at + INTERVAL '180 minutes'
+            WITH sampled AS (
+                SELECT
+                    temperature, humidity, pressure, windspeed, weathercode,
+                    latitude  AS lat,
+                    longitude AS lon,
+                    EXTRACT(HOUR  FROM created_at) AS hour,
+                    EXTRACT(MONTH FROM created_at) AS month,
+                    (weathercode IN (51,53,55,61,63,65,71,73,75,80,81,82,95,96,99))
+                        AS is_raining_now,
+                    LEAD(weathercode, 2) OVER (
+                        PARTITION BY ROUND(latitude::numeric,2), ROUND(longitude::numeric,2)
+                        ORDER BY created_at
+                    ) AS future_wc
+                FROM weather_data TABLESAMPLE BERNOULLI(0.5)
+                WHERE temperature IS NOT NULL
+                  AND humidity    IS NOT NULL
+                  AND pressure    IS NOT NULL
             )
-            WHERE w.temperature IS NOT NULL
-              AND w.humidity    IS NOT NULL
-              AND w.pressure    IS NOT NULL
-            ORDER BY w.created_at DESC
+            SELECT
+                temperature, humidity, pressure, windspeed, weathercode,
+                lat, lon, hour, month, is_raining_now,
+                (future_wc IN (51,53,55,61,63,65,71,73,75,80,81,82,95,96,99))
+                    AS rained_2h
+            FROM sampled
+            WHERE future_wc IS NOT NULL
+            LIMIT 5000
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        n = len(rows)
+        if n < 3:
+            _train_state["lastResult"] = {"error": f"Insufficient labeled pairs ({n})"}
+            return
+
+        unique_pairs = list({(float(r["lat"]), float(r["lon"])) for r in rows})
+        elev_map = fetch_elevations(unique_pairs)
+
+        rows_with_elev = []
+        for r in rows:
+            rd = dict(r)
+            key = (round(float(rd["lat"]), 6), round(float(rd["lon"]), 6))
+            rd["elevation"] = elev_map.get(key, 1000.0)
+            rows_with_elev.append(rd)
+
+        X = np.array([extract_features(r) for r in rows_with_elev])
+        y = np.array([1.0 if r["rained_2h"] else 0.0 for r in rows_with_elev])
+
+        unique_classes = np.unique(y)
+        if len(unique_classes) < 2:
+            _train_state["lastResult"] = {"error": "Need both rain and no-rain observations"}
+            return
+
+        log.info("Training sklearn ensemble on %d samples (rain=%.1f%%)", n, 100 * y.mean())
+
+        split = int(0.8 * n)
+        idx = np.random.RandomState(42).permutation(n)
+        X_tr, X_te = X[idx[:split]], X[idx[split:]]
+        y_tr, y_te = y[idx[:split]], y[idx[split:]]
+
+        lr = Pipeline([
+            ("scaler", StandardScaler()),
+            ("clf", LogisticRegression(C=1.0, max_iter=1000, random_state=42)),
+        ])
+        rf = RandomForestClassifier(n_estimators=100, max_features="sqrt", max_depth=8, n_jobs=-1, random_state=42)
+        gb = GradientBoostingClassifier(n_estimators=100, learning_rate=0.08, max_depth=4, random_state=42)
+
+        lr.fit(X_tr, y_tr); rf.fit(X_tr, y_tr); gb.fit(X_tr, y_tr)
+
+        def acc(model):
+            return round(float(np.mean(model.predict(X_te) == y_te)) * 100, 1)
+
+        lr_acc = acc(lr); rf_acc = acc(rf); gb_acc = acc(gb)
+        ens_proba = (lr.predict_proba(X_te)[:, 1] + rf.predict_proba(X_te)[:, 1] + gb.predict_proba(X_te)[:, 1]) / 3
+        ens_acc = round(float(np.mean((ens_proba >= 0.5) == y_te)) * 100, 1)
+
+        trained_at = datetime.now(timezone.utc).isoformat()
+        model_data = {
+            "version": "sklearn_ensemble_v2",
+            "trainedAt": trained_at,
+            "trainingSamples": n,
+            "accuracy": ens_acc,
+            "lrAccuracy": lr_acc,
+            "rfAccuracy": rf_acc,
+            "gbAccuracy": gb_acc,
+            "lr": lr, "rf": rf, "gb": gb,
+        }
+        joblib.dump(model_data, MODEL_PATH)
+        log.info("Model saved — accuracy: %s%%", ens_acc)
+        _train_state["lastResult"] = {
+            "trainingSamples": n,
+            "accuracy": ens_acc,
+            "lrAccuracy": lr_acc,
+            "rfAccuracy": rf_acc,
+            "gbAccuracy": gb_acc,
+            "message": f"Ensemble trained on {n} pairs. Accuracy: {ens_acc}% (LR: {lr_acc}%, RF: {rf_acc}%, GB: {gb_acc}%)",
+        }
+    except Exception as exc:
+        log.exception("Background train failed")
+        _train_state["lastResult"] = {"error": str(exc)}
+    finally:
+        _train_state["running"] = False
+
+
+@app.route("/train", methods=["POST"])
+def train():
+    if _train_state["running"]:
+        return jsonify({"status": "already_running", "message": "Training already in progress"}), 202
+    _train_state["running"] = True
+    _train_state["lastResult"] = None
+    t = threading.Thread(target=_do_train, daemon=True)
+    t.start()
+    return jsonify({"status": "accepted", "message": "Training started in background — check /train/status"}), 202
+
+
+@app.route("/train/status", methods=["GET"])
+def train_status():
+    return jsonify({
+        "running": _train_state["running"],
+        "lastResult": _train_state["lastResult"],
+    })
+
+
+@app.route("/_legacy_train_sync", methods=["POST"])
+def _legacy_train():
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Use LEAD() window function — orders of magnitude faster than a self-join.
+        # TABLESAMPLE gives a fast random sample without a full-table scan.
+        cur.execute("""
+            WITH sampled AS (
+                SELECT
+                    temperature, humidity, pressure, windspeed, weathercode,
+                    latitude  AS lat,
+                    longitude AS lon,
+                    EXTRACT(HOUR  FROM created_at) AS hour,
+                    EXTRACT(MONTH FROM created_at) AS month,
+                    (weathercode IN (51,53,55,61,63,65,71,73,75,80,81,82,95,96,99))
+                        AS is_raining_now,
+                    LEAD(weathercode, 2) OVER (
+                        PARTITION BY ROUND(latitude::numeric,2), ROUND(longitude::numeric,2)
+                        ORDER BY created_at
+                    ) AS future_wc
+                FROM weather_data TABLESAMPLE BERNOULLI(0.5)
+                WHERE temperature IS NOT NULL
+                  AND humidity    IS NOT NULL
+                  AND pressure    IS NOT NULL
+            )
+            SELECT
+                temperature, humidity, pressure, windspeed, weathercode,
+                lat, lon, hour, month, is_raining_now,
+                (future_wc IN (51,53,55,61,63,65,71,73,75,80,81,82,95,96,99))
+                    AS rained_2h
+            FROM sampled
+            WHERE future_wc IS NOT NULL
             LIMIT 5000
         """)
         rows = cur.fetchall()
@@ -699,15 +838,15 @@ if __name__ == "__main__":
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Use gunicorn with 4 workers + preload so the bootstrap thread
-    # starts exactly once before workers are forked.
+    # Single worker + threads: training state stays in one process,
+    # background training threads don't block HTTP requests.
     result = subprocess.run(
         [
             gunicorn_bin,
-            "--workers", "4",
+            "--workers", "1",
+            "--threads", "4",
             "--bind", f"0.0.0.0:{port}",
-            "--timeout", "120",
-            "--preload",           # load app once → bootstrap runs once
+            "--timeout", "300",
             "--log-level", "info",
             "app:app",
         ],
