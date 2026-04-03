@@ -606,8 +606,8 @@ importers:
         specifier: ^0.32.16
         version: 0.32.16(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       expo-sensors:
-        specifier: ^55.0.9
-        version: 55.0.9(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
+        specifier: ^15.0.8
+        version: 15.0.8(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
       react-native-webview:
         specifier: ^13.16.1
         version: 13.16.1(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -3680,8 +3680,8 @@ packages:
       react-server-dom-webpack:
         optional: true
 
-  expo-sensors@55.0.9:
-    resolution: {integrity: sha512-PK6hjL2yf4YvumEd+7QXI0mWdyMPiL7MmZnpaDWheZ/g11dsxobKyHWfehjfRUnmnwZD8P6lnQZ2bBvB50ZjjA==}
+  expo-sensors@15.0.8:
+    resolution: {integrity: sha512-ttibOSCYjFAMIfjV+vVukO1v7GKlbcPRfxcRqbTaSMGneewDwVSXbGFImY530fj1BR3mWq4n9jHnuDp8tAEY9g==}
     peerDependencies:
       expo: '*'
       react-native: '*'
@@ -9580,7 +9580,7 @@ snapshots:
       - '@types/react-dom'
       - supports-color
 
-  expo-sensors@55.0.9(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)):
+  expo-sensors@15.0.8(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)):
     dependencies:
       expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(react-native-webview@13.16.1(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       invariant: 2.2.4

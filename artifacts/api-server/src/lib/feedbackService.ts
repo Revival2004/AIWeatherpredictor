@@ -15,6 +15,39 @@ import {
 import { isNull, lte, and, gte, asc, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 
+/**
+ * Returns accuracy over the last N hours of resolved predictions.
+ * Used by the drift detector to decide whether the model needs retraining.
+ * Returns null if there are fewer than minSamples resolved — not enough
+ * signal to make a decision.
+ */
+export async function getRollingAccuracy(
+  hoursBack: number,
+  minSamples = 20
+): Promise<{ accuracy: number | null; total: number; correct: number }> {
+  const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      total:   sql<number>`count(*)`,
+      correct: sql<number>`count(*) filter (where ${weatherPredictionsTable.isCorrect} = true)`,
+    })
+    .from(weatherPredictionsTable)
+    .where(
+      and(
+        sql`${weatherPredictionsTable.isCorrect} IS NOT NULL`,
+        gte(weatherPredictionsTable.feedbackAt, since)
+      )
+    );
+
+  const { total, correct } = rows[0] ?? { total: 0, correct: 0 };
+  const n = Number(total);
+  const c = Number(correct);
+  const accuracy = n >= minSamples ? Math.round((c / n) * 1000) / 10 : null;
+
+  return { accuracy, total: n, correct: c };
+}
+
 const RAIN_CODES = new Set([
   51, 53, 55, 56, 57,
   61, 63, 65, 66, 67,

@@ -56,7 +56,7 @@
   },
   "dependencies": {
     "expo-notifications": "^0.32.16",
-    "expo-sensors": "^55.0.9",
+    "expo-sensors": "^15.0.8",
     "react-native-webview": "^13.16.1"
   }
 }

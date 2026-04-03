@@ -14,17 +14,60 @@ import { db, weatherPredictionsTable, weatherDataTable } from "@workspace/db";
 import { fetchWeather } from "./weatherService.js";
 import { predictWithHistory } from "./aiService.js";
 import { predictRain, trainModel } from "./mlService.js";
-import { runFeedbackLoop } from "./feedbackService.js";
+import { runFeedbackLoop, getRollingAccuracy } from "./feedbackService.js";
 import { getActiveLocations } from "./locationService.js";
 import { desc } from "drizzle-orm";
 
+// ─── Drift detection config ───────────────────────────────────────────────────
+// If rolling accuracy over the last 48 hours falls below this threshold,
+// the model has drifted — weather patterns have shifted and retraining is needed.
+const DRIFT_THRESHOLD_PCT  = 65;   // retrain if accuracy drops below 65%
+const DRIFT_WINDOW_HOURS   = 48;   // look back 48 hours to compute rolling accuracy
+const MIN_RETRAIN_GAP_MS   = 6 * 60 * 60 * 1000; // never retrain more than once per 6 hours
+
+let lastRetrainAt: number = 0;       // timestamp of last retrain (0 = never)
 let schedulerStarted = false;
+
+async function runDriftCheck(logger: Logger): Promise<void> {
+  const { accuracy, total } = await getRollingAccuracy(DRIFT_WINDOW_HOURS);
+
+  if (accuracy === null) {
+    // Not enough resolved predictions yet — skip check
+    logger.debug({ total }, "Drift check skipped — insufficient samples");
+    return;
+  }
+
+  logger.info({ accuracy, total, threshold: DRIFT_THRESHOLD_PCT }, "Rolling accuracy check");
+
+  const drifted = accuracy < DRIFT_THRESHOLD_PCT;
+  const cooldownOk = Date.now() - lastRetrainAt > MIN_RETRAIN_GAP_MS;
+
+  if (drifted && cooldownOk) {
+    logger.warn(
+      { accuracy, threshold: DRIFT_THRESHOLD_PCT, windowHours: DRIFT_WINDOW_HOURS },
+      "Model drift detected — triggering immediate retrain"
+    );
+    try {
+      const result = await trainModel(logger);
+      lastRetrainAt = Date.now();
+      logger.info(
+        { accuracy: result.accuracy, samples: result.trainingSamples, trigger: "drift" },
+        "Drift-triggered retrain completed"
+      );
+    } catch (err) {
+      logger.error({ err }, "Drift-triggered retrain failed");
+    }
+  } else if (drifted && !cooldownOk) {
+    const waitMins = Math.round((MIN_RETRAIN_GAP_MS - (Date.now() - lastRetrainAt)) / 60000);
+    logger.info({ accuracy, waitMins }, "Drift detected but in cooldown — will retry");
+  }
+}
 
 export function startScheduler(logger: Logger): void {
   if (schedulerStarted) return;
   schedulerStarted = true;
 
-  // Run every hour at minute 5 (e.g., 1:05, 2:05, ...)
+  // ── Hourly weather collection — every hour at :05 ─────────────────────────
   cron.schedule("5 * * * *", async () => {
     logger.info("Hourly weather collection starting");
     try {
@@ -35,7 +78,9 @@ export function startScheduler(logger: Logger): void {
     }
   });
 
-  // Run feedback loop every hour at minute 15 (after collection has had time to land)
+  // ── Feedback + drift detection — every hour at :15 ────────────────────────
+  // After comparing predictions to actuals, immediately check if the model
+  // has drifted and retrain on the spot if needed. No more fixed monthly schedule.
   cron.schedule("15 * * * *", async () => {
     logger.info("Running prediction feedback loop");
     try {
@@ -43,22 +88,40 @@ export function startScheduler(logger: Logger): void {
       logger.info({ resolved }, "Feedback loop completed");
     } catch (err) {
       logger.error({ err }, "Feedback loop failed");
+      return; // skip drift check if feedback itself failed
+    }
+
+    // Drift check: if rolling accuracy has dropped, retrain immediately
+    try {
+      await runDriftCheck(logger);
+    } catch (err) {
+      logger.error({ err }, "Drift check failed");
     }
   });
 
-  // Monthly auto-retrain: 1st of each month at 2:00 AM
-  // Refreshes the model with the latest 24 months of Open-Meteo data so it never goes stale
-  cron.schedule("0 2 1 * *", async () => {
-    logger.info("Monthly scheduled retrain starting");
+  // ── Safety-net retrain — weekly on Sundays at 3:00 AM ─────────────────────
+  // Drift detection handles most cases. This weekly job ensures the model
+  // is always refreshed with recent data even in low-traffic periods
+  // where drift detection might not have enough samples to trigger.
+  cron.schedule("0 3 * * 0", async () => {
+    const cooldownOk = Date.now() - lastRetrainAt > MIN_RETRAIN_GAP_MS;
+    if (!cooldownOk) {
+      logger.info("Weekly retrain skipped — recent drift-triggered retrain already ran");
+      return;
+    }
+    logger.info("Weekly scheduled retrain starting");
     try {
       const result = await trainModel(logger);
-      logger.info({ accuracy: result.accuracy, samples: result.trainingSamples }, "Monthly retrain completed");
+      lastRetrainAt = Date.now();
+      logger.info({ accuracy: result.accuracy, samples: result.trainingSamples, trigger: "weekly" }, "Weekly retrain completed");
     } catch (err) {
-      logger.error({ err }, "Monthly retrain failed");
+      logger.error({ err }, "Weekly retrain failed");
     }
   });
 
-  logger.info("Scheduler started — weather collection every hour at :05, feedback at :15, monthly retrain on 1st at 02:00");
+  logger.info(
+    "Scheduler started — collection :05, feedback+drift-check :15, weekly safety retrain Sundays 03:00"
+  );
 }
 
 export interface CollectionResult {
