@@ -17,3 +17,9 @@ id = "ueruysNUIVB4aBCw15eDw"
 uri = "file://FARMPAL_DOCUMENTATION.md"
 type = "text"
 title = "FarmPal — Complete Feature Documentation"
+
+[[outputs]]
+id = "OZkGvqIo5szfzTjGXNUDg"
+uri = "file://FARMPAL_GOVERNMENT_BRIEF.md"
+type = "text"
+title = "FarmPal — Government Technical & Policy Brief"
