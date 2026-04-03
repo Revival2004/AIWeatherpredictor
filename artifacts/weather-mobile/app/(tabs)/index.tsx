@@ -3,17 +3,11 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  sendRainAlert,
-  scheduleFeedbackReminder,
-  cancelFeedbackReminder,
-} from "@/services/NotificationService";
-import * as Notifications from "expo-notifications";
+import { sendRainAlert } from "@/services/NotificationService";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import OnboardingModal from "@/components/OnboardingModal";
 import { useLanguage, LANG_LABELS } from "@/contexts/LanguageContext";
-import FarmerFeedbackCard, { FEEDBACK_PENDING_KEY, type PendingFeedback } from "@/components/FarmerFeedbackCard";
 import MLStatusBadge from "@/components/MLStatusBadge";
 import {
   Platform,
@@ -215,7 +209,6 @@ export default function DashboardScreen() {
   const [usingDefault, setUsingDefault] = useState(false);
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
-  const [feedbackPending, setFeedbackPending] = useState<PendingFeedback | null>(null);
   const [locationUpdated, setLocationUpdated] = useState(false);
 
   // Haversine distance in km between two coordinates
@@ -430,63 +423,6 @@ export default function DashboardScreen() {
       sendRainAlert(prob, name).catch(() => {});
     }
   }, [rainData, locationLabel]);
-
-  // Farmer feedback — store pending + schedule push notification when prediction arrives
-  useEffect(() => {
-    if (!rainData || !coords) return;
-    const name = locationLabel ?? "My Farm";
-    const pending: PendingFeedback = {
-      lat: coords.latitude,
-      lon: coords.longitude,
-      locationName: name,
-      predictedAt: Date.now(),
-    };
-    // Persist so the card appears when app is re-opened after 2h
-    AsyncStorage.setItem(FEEDBACK_PENDING_KEY, JSON.stringify(pending)).catch(() => {});
-    // Schedule a push notification that fires in exactly 2 hours
-    scheduleFeedbackReminder(name).catch(() => {});
-  }, [rainData]);
-
-  // On mount: show feedback card if a pending prediction is already ≥2h old
-  useEffect(() => {
-    AsyncStorage.getItem(FEEDBACK_PENDING_KEY).then((raw) => {
-      if (!raw) return;
-      try {
-        const p: PendingFeedback = JSON.parse(raw);
-        const ageMs = Date.now() - p.predictedAt;
-        const TWO_HOURS = 2 * 60 * 60 * 1000;
-        if (ageMs >= TWO_HOURS) {
-          setFeedbackPending(p);
-        }
-      } catch {}
-    });
-  }, []);
-
-  // Notification tap listener — farmer taps the "Did it rain?" notification
-  // Covers both: app already open (live listener) + app cold-started from notification
-  useEffect(() => {
-    const showFeedbackFromStorage = () => {
-      AsyncStorage.getItem(FEEDBACK_PENDING_KEY).then((raw) => {
-        if (!raw) return;
-        try { setFeedbackPending(JSON.parse(raw)); } catch {}
-      });
-    };
-
-    // Cold-start: app was opened by tapping the notification
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response?.notification.request.content.data?.type === "feedback_reminder") {
-        showFeedbackFromStorage();
-      }
-    }).catch(() => {});
-
-    // Foreground: app was already open when notification was tapped
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      if (response.notification.request.content.data?.type === "feedback_reminder") {
-        showFeedbackFromStorage();
-      }
-    });
-    return () => sub.remove();
-  }, []);
 
   const isLoading = geoLoading || weatherLoading;
 
@@ -816,20 +752,6 @@ export default function DashboardScreen() {
                 lat={coords.latitude}
                 lon={coords.longitude}
               />
-            )}
-
-            {/* Farmer feedback — shown 2h after prediction */}
-            {feedbackPending && (
-              <>
-                <Text style={[styles.sectionLabel, { marginTop: 4 }]}>YOUR FEEDBACK</Text>
-                <FarmerFeedbackCard
-                  pending={feedbackPending}
-                  onDismiss={() => {
-                    setFeedbackPending(null);
-                    cancelFeedbackReminder().catch(() => {});
-                  }}
-                />
-              </>
             )}
 
             <Text style={styles.sectionLabel}>FARMING TIP</Text>
