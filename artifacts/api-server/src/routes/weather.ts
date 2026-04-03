@@ -36,12 +36,48 @@ router.get("/weather", async (req, res): Promise<void> => {
   const { lat, lon, localPressure } = parsed.data;
 
   let weatherData;
+  let usingCachedWeather = false;
   try {
     weatherData = await fetchWeather(lat, lon);
   } catch (err) {
-    req.log.error({ err }, "Failed to fetch weather from Open-Meteo");
-    res.status(500).json({ error: "Failed to fetch weather data. Please try again." });
-    return;
+    req.log.warn({ err }, "Open-Meteo unavailable — falling back to most recent DB record");
+    // Fall back to the most recent nearby reading in the database
+    const cached = await db
+      .select({
+        temperature: weatherDataTable.temperature,
+        windspeed:   weatherDataTable.windspeed,
+        humidity:    weatherDataTable.humidity,
+        pressure:    weatherDataTable.pressure,
+        weathercode: weatherDataTable.weathercode,
+      })
+      .from(weatherDataTable)
+      .where(
+        and(
+          gte(weatherDataTable.latitude,  lat - 2.7),
+          lte(weatherDataTable.latitude,  lat + 2.7),
+          gte(weatherDataTable.longitude, lon - 2.7),
+          lte(weatherDataTable.longitude, lon + 2.7),
+        )
+      )
+      .orderBy(desc(weatherDataTable.createdAt))
+      .limit(1);
+
+    if (!cached.length) {
+      req.log.error({ err }, "Failed to fetch weather from Open-Meteo and no cached data found");
+      res.status(500).json({ error: "Failed to fetch weather data. Please try again." });
+      return;
+    }
+
+    const c = cached[0];
+    weatherData = {
+      temperature: c.temperature,
+      windspeed:   c.windspeed,
+      humidity:    c.humidity,
+      pressure:    c.pressure,
+      weathercode: c.weathercode,
+      time:        new Date().toISOString(),
+    };
+    usingCachedWeather = true;
   }
 
   // If the phone sent a barometer reading, blend it with Open-Meteo pressure.
