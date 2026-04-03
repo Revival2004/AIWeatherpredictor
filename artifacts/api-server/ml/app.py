@@ -718,15 +718,25 @@ def _do_bootstrap(months_back: int = 24) -> dict:
 
 @app.route("/bootstrap", methods=["POST"])
 def bootstrap():
-    """Synchronous bootstrap — blocks until training is complete."""
-    try:
-        body = request.get_json(force=True) or {}
-        months_back = int(body.get("monthsBack", 24))
-        result = _do_bootstrap(months_back)
-        return jsonify(result)
-    except Exception as exc:
-        log.exception("Bootstrap failed")
-        return jsonify({"error": str(exc)}), 500
+    """Async bootstrap — starts in background and returns immediately."""
+    if _bootstrap_state["running"]:
+        return jsonify({"message": "Bootstrap already running", "status": "running"}), 202
+    body = request.get_json(force=True) or {}
+    months_back = int(body.get("monthsBack", 24))
+
+    def _run():
+        _bootstrap_state["running"] = True
+        try:
+            result = _do_bootstrap(months_back)
+            _bootstrap_state["lastResult"] = result
+        except Exception as exc:
+            log.exception("Bootstrap failed")
+            _bootstrap_state["lastResult"] = {"error": str(exc)}
+        finally:
+            _bootstrap_state["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"message": "Bootstrap started in background", "monthsBack": months_back, "status": "running"}), 202
 
 
 @app.route("/bootstrap_location", methods=["POST"])
