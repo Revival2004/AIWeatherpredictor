@@ -30,7 +30,7 @@ router.get("/weather", async (req, res): Promise<void> => {
     return;
   }
 
-  const { lat, lon } = parsed.data;
+  const { lat, lon, localPressure } = parsed.data;
 
   let weatherData;
   try {
@@ -39,6 +39,13 @@ router.get("/weather", async (req, res): Promise<void> => {
     req.log.error({ err }, "Failed to fetch weather from Open-Meteo");
     res.status(500).json({ error: "Failed to fetch weather data. Please try again." });
     return;
+  }
+
+  // If the phone sent a barometer reading, blend it with Open-Meteo pressure.
+  // Local sensor is more accurate for the farm's exact elevation microclimate;
+  // Open-Meteo is the calibrated reference. 80% local / 20% satellite.
+  if (localPressure && localPressure > 850 && localPressure < 1100) {
+    weatherData.pressure = localPressure * 0.8 + weatherData.pressure * 0.2;
   }
 
   // Fetch recent historical records for pattern learning — location-aware.

@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import { sendRainAlert } from "@/services/NotificationService";
+import { useBarometer } from "@/hooks/useBarometer";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import OnboardingModal from "@/components/OnboardingModal";
@@ -301,16 +302,24 @@ export default function DashboardScreen() {
     }).catch(() => applyDefault());
   }, []);
 
+  const baro = useBarometer();
+
+  const weatherParams = {
+    lat: coords?.latitude ?? 0,
+    lon: coords?.longitude ?? 0,
+    ...(baro.available && baro.pressure ? { localPressure: baro.pressure } : {}),
+  };
+
   const {
     data: weatherData,
     isLoading: weatherLoading,
     error: weatherError,
     refetch,
   } = useGetWeather(
-    { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
+    weatherParams,
     {
       query: {
-        queryKey: getGetWeatherQueryKey({ lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 }),
+        queryKey: getGetWeatherQueryKey(weatherParams),
         enabled: fetchEnabled && coords !== null,
         staleTime: 5 * 60 * 1000,
       },
@@ -603,6 +612,30 @@ export default function DashboardScreen() {
           <Feather name="map-pin" size={13} color="#fff" />
           <Text style={{ color: "#fff", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
             Location updated — your farm moved, showing new area
+          </Text>
+        </View>
+      )}
+
+      {/* Barometer trend banner — only shown when sensor detects significant pressure change */}
+      {baro.available && baro.trend === "falling" && (
+        <View style={{ backgroundColor: "#1D4ED822", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#1D4ED833" }}>
+          <Feather name="trending-down" size={13} color="#1D4ED8" />
+          <Text style={{ color: "#1D4ED8", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
+            Pressure falling on your farm — rain may be approaching
+          </Text>
+          <Text style={{ color: "#1D4ED899", fontSize: 11, fontFamily: "Inter_400Regular" }}>
+            {baro.pressure?.toFixed(0)} hPa
+          </Text>
+        </View>
+      )}
+      {baro.available && baro.trend === "rising" && (
+        <View style={{ backgroundColor: "#15803D22", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#15803D33" }}>
+          <Feather name="trending-up" size={13} color="#15803D" />
+          <Text style={{ color: "#15803D", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
+            Pressure rising — conditions improving
+          </Text>
+          <Text style={{ color: "#15803D99", fontSize: 11, fontFamily: "Inter_400Regular" }}>
+            {baro.pressure?.toFixed(0)} hPa
           </Text>
         </View>
       )}

@@ -22,6 +22,7 @@ export const HealthCheckResponse = zod.object({
 export const GetWeatherQueryParams = zod.object({
   lat: zod.coerce.number().describe("Latitude"),
   lon: zod.coerce.number().describe("Longitude"),
+  localPressure: zod.coerce.number().optional().describe("Phone barometer pressure in hPa — overrides Open-Meteo pressure in ML prediction"),
 });
 
 export const GetWeatherResponse = zod.object({
