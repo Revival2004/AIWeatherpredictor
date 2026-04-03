@@ -434,6 +434,46 @@ def predict():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route("/predict_batch", methods=["POST"])
+def predict_batch():
+    """Accept a list of weather dicts, return a probability for each one."""
+    try:
+        items = request.get_json(force=True)
+        if not isinstance(items, list) or len(items) == 0:
+            return jsonify({"error": "Expected a non-empty JSON array"}), 400
+
+        if not os.path.exists(MODEL_PATH):
+            return jsonify({"error": "No model trained yet", "modelTrained": False}), 404
+
+        model_data = joblib.load(MODEL_PATH)
+        lr = model_data["lr"]
+        rf = model_data["rf"]
+        gb = model_data["gb"]
+
+        X = np.array([extract_features(row) for row in items])
+        lr_ps = lr.predict_proba(X)[:, 1]
+        rf_ps = rf.predict_proba(X)[:, 1]
+        gb_ps = gb.predict_proba(X)[:, 1]
+        ens_ps = (lr_ps + rf_ps + gb_ps) / 3
+
+        results = [
+            {
+                "probability": round(float(ens_ps[i]), 4),
+                "willRain": bool(ens_ps[i] >= 0.5),
+            }
+            for i in range(len(items))
+        ]
+        return jsonify({
+            "predictions": results,
+            "accuracy": model_data["accuracy"],
+            "modelTrained": True,
+        })
+
+    except Exception as exc:
+        log.exception("Batch predict failed")
+        return jsonify({"error": str(exc)}), 500
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 61 Kenyan farming locations across all major agricultural zones
 # ─────────────────────────────────────────────────────────────────────────────

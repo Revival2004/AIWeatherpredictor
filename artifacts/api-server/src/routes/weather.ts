@@ -583,6 +583,139 @@ router.get("/weather/storm-timeline", async (req, res): Promise<void> => {
 });
 
 /**
+ * GET /weather/today-timeline
+ * Returns hourly rain predictions for the rest of today using the ML ensemble.
+ * Fetches Open-Meteo hourly forecast → sends all hours to /predict_batch → returns timeline.
+ */
+router.get("/weather/today-timeline", async (req, res): Promise<void> => {
+  const lat = parseFloat(req.query.lat as string);
+  const lon = parseFloat(req.query.lon as string);
+  if (isNaN(lat) || isNaN(lon)) {
+    res.status(400).json({ error: "lat and lon are required" });
+    return;
+  }
+
+  try {
+    // Fetch hourly forecast for today + tomorrow from Open-Meteo
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${lat}&longitude=${lon}` +
+      `&hourly=temperature_2m,relative_humidity_2m,pressure_msl,wind_speed_10m,weathercode,precipitation_probability` +
+      `&forecast_days=2&timezone=auto`;
+
+    const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) throw new Error(`Open-Meteo ${r.status}`);
+
+    const raw = (await r.json()) as {
+      hourly: {
+        time: string[];
+        temperature_2m: number[];
+        relative_humidity_2m: number[];
+        pressure_msl: number[];
+        wind_speed_10m: number[];
+        weathercode: number[];
+        precipitation_probability: number[];
+      };
+    };
+
+    const h = raw.hourly;
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+
+    // Fetch elevation once for this location
+    const elevUrl = `https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`;
+    const elevR = await fetch(elevUrl, { signal: AbortSignal.timeout(5_000) });
+    const elevData = elevR.ok ? (await elevR.json()) as { elevation: number[] } : null;
+    const elevation = elevData?.elevation?.[0] ?? 1000;
+
+    // Filter to today's remaining hours + next 6 hours of tomorrow for late-night farmers
+    const slots = h.time
+      .map((t, i) => ({
+        time: t,
+        hour: new Date(t).getHours(),
+        date: t.slice(0, 10),
+        temperature: h.temperature_2m[i] ?? 20,
+        humidity: h.relative_humidity_2m[i] ?? 60,
+        pressure: h.pressure_msl[i] ?? 1013,
+        windspeed: h.wind_speed_10m[i] ?? 0,
+        weathercode: h.weathercode[i] ?? 0,
+        omProbability: h.precipitation_probability[i] ?? 0,
+        isRainingNow: [51,53,55,61,63,65,71,73,75,80,81,82,95,96,99].includes(h.weathercode[i] ?? 0),
+        elevation,
+        lat,
+        lon,
+      }))
+      .filter((s) => {
+        const slotTime = new Date(s.time);
+        // from current hour onwards, up to midnight tonight
+        return slotTime >= new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours())
+          && s.date === todayStr;
+      });
+
+    if (slots.length === 0) {
+      res.json({ slots: [] });
+      return;
+    }
+
+    // Send all hours to ML /predict_batch in one call
+    const ML_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5000";
+    const batchPayload = slots.map((s) => ({
+      temperature: s.temperature,
+      humidity: s.humidity,
+      pressure: s.pressure,
+      windspeed: s.windspeed,
+      is_raining_now: s.isRainingNow,
+      lat: s.lat,
+      lon: s.lon,
+      hour: s.hour,
+      month: new Date(s.time).getMonth() + 1,
+      elevation: s.elevation,
+    }));
+
+    let mlPredictions: { probability: number; willRain: boolean }[] | null = null;
+    try {
+      const mlRes = await fetch(`${ML_URL}/predict_batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(batchPayload),
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (mlRes.ok) {
+        const mlData = (await mlRes.json()) as { predictions: { probability: number; willRain: boolean }[] };
+        mlPredictions = mlData.predictions;
+      }
+    } catch {
+      // ML service unavailable — fall back to Open-Meteo probabilities
+    }
+
+    const result = slots.map((s, i) => {
+      const mlP = mlPredictions?.[i];
+      // Blend: 70% ML model + 30% Open-Meteo (when ML available), else 100% Open-Meteo
+      const probability = mlP
+        ? Math.round((mlP.probability * 0.7 + (s.omProbability / 100) * 0.3) * 100)
+        : s.omProbability;
+      const willRain = probability >= 50;
+
+      return {
+        time: s.time,
+        hour: s.hour,
+        label: new Date(s.time).toLocaleTimeString("en-KE", { hour: "numeric", hour12: true }),
+        temperature: Math.round(s.temperature),
+        probability,
+        willRain,
+        weathercode: s.weathercode,
+        isNow: new Date(s.time).getHours() === now.getHours() && s.date === todayStr,
+      };
+    });
+
+    res.json({ slots: result });
+  } catch (err) {
+    req.log.error({ err }, "Today timeline fetch failed");
+    res.status(500).json({ error: "Failed to fetch today timeline." });
+  }
+});
+
+/**
  * GET /weather/community
  * Returns nearby farmer activity within ~15 km radius.
  * Used by the mobile app to show "N farmers in your zone" and boost confidence display.

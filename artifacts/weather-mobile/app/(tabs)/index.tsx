@@ -39,6 +39,7 @@ import {
 import { WeatherHeroCard } from "@/components/WeatherHeroCard";
 import AlertsBanner from "@/components/AlertsBanner";
 import CommunityInsightCard from "@/components/CommunityInsightCard";
+import TodayTimeline from "@/components/TodayTimeline";
 import { useColors } from "@/hooks/useColors";
 
 interface Coords {
@@ -771,6 +772,14 @@ export default function DashboardScreen() {
                 </View>
                 <RainPredictionCard data={rainData} />
               </>
+            )}
+
+            {/* Today's hourly rain timeline */}
+            {coords && (
+              <TodayTimeline
+                lat={coords.latitude}
+                lon={coords.longitude}
+              />
             )}
 
             {/* Farmer feedback — shown 2h after prediction */}
