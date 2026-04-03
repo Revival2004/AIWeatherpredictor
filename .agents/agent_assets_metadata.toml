@@ -11,3 +11,9 @@ id = "v30IVEsoA_028t0ZV0pf6"
 uri = "file://microclimate-source.zip"
 type = "unspecified"
 title = "Microclimate AI — Full Source Code"
+
+[[outputs]]
+id = "ueruysNUIVB4aBCw15eDw"
+uri = "file://FARMPAL_DOCUMENTATION.md"
+type = "text"
+title = "FarmPal — Complete Feature Documentation"

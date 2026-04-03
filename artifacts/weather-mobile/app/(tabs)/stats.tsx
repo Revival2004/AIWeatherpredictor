@@ -28,14 +28,12 @@ import {
   useActivateLocation,
   useDeactivateLocation,
   useTriggerCollection,
-  useTrainModel,
   getGetLocationsQueryKey,
   getGetMetricsQueryKey,
   getGetWeatherStatsQueryKey,
   type CollectionResponse,
-  type TrainResponse,
 } from "@/lib/api-client";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { StatsPanel } from "@/components/StatsPanel";
 import { useColors } from "@/hooks/useColors";
 
@@ -108,40 +106,6 @@ export default function StatsScreen() {
       },
       onError: () => Alert.alert("Error", "Collection failed. Check your locations."),
     },
-  });
-
-  const trainMutation = useTrainModel({
-    mutation: {
-      onSuccess: (data: TrainResponse) => {
-        queryClient.invalidateQueries({ queryKey: getGetMetricsQueryKey() });
-        Alert.alert("Training complete", data.message ?? `Trained on ${data.trainingSamples} samples.`);
-      },
-      onError: () => Alert.alert("Error", "Training failed. Need more weather data first."),
-    },
-  });
-
-  const bootstrapMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${getApiBase()}/api/bootstrap`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ monthsBack: 120 }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Bootstrap failed");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: getGetMetricsQueryKey() });
-      Alert.alert(
-        "Historical data loaded",
-        data.message ?? `Model trained on ${data.trainingSamples?.toLocaleString()} samples.`
-      );
-    },
-    onError: (err: Error) =>
-      Alert.alert("Bootstrap failed", err.message ?? "Could not fetch historical data."),
   });
 
   function handleAddLocation() {
@@ -514,7 +478,7 @@ export default function StatsScreen() {
             </>
           ) : (
             <View style={{ paddingTop: 12 }}>
-              <Text style={styles.emptyText}>No ensemble trained yet. Tap "Train Model" below.</Text>
+              <Text style={styles.emptyText}>Model trains automatically each month as weather data is collected.</Text>
             </View>
           )}
         </View>
@@ -533,73 +497,6 @@ export default function StatsScreen() {
               <Feather name="cloud-rain" size={14} color="#fff" />
             )}
             <Text style={styles.actionBtnText}>Collect Now</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: "#3D8B37" }]}
-            onPress={() => trainMutation.mutate()}
-            disabled={trainMutation.isPending || (metricsData?.observations ?? 0) < 5}
-            activeOpacity={0.8}
-          >
-            {trainMutation.isPending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Feather name="cpu" size={14} color="#fff" />
-            )}
-            <Text style={styles.actionBtnText}>Train Model</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Bootstrap from Kenya historical data */}
-        <View style={{
-          marginHorizontal: 20,
-          marginTop: 10,
-          padding: 14,
-          backgroundColor: `${colors.primary}10`,
-          borderRadius: 14,
-          borderWidth: 1,
-          borderColor: `${colors.primary}30`,
-        }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <Feather name="database" size={14} color={colors.primary} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.primary }}>
-              Seed with Kenya Historical Data
-            </Text>
-          </View>
-          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 10, lineHeight: 17 }}>
-            Downloads 10 years of real weather records for 8 major Kenyan farming regions from the Open-Meteo archive (~600,000 hourly readings) and trains the model — capturing seasonal cycles, long rains/short rains patterns, and year-to-year climate drift.
-          </Text>
-          <TouchableOpacity
-            style={[styles.actionBtn, {
-              backgroundColor: bootstrapMutation.isPending ? colors.muted : colors.primary,
-              alignSelf: "flex-start",
-              paddingHorizontal: 16,
-            }]}
-            onPress={() => {
-              Alert.alert(
-                "Seed with Historical Data?",
-                "This will fetch ~600,000 hourly readings from Open-Meteo for Nakuru, Eldoret, Kisumu, Meru, Kericho, Kitale, Nairobi and Embu (last 10 years) and train the model. Takes about 8–12 minutes — please keep the app open.",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Proceed", onPress: () => bootstrapMutation.mutate() },
-                ]
-              );
-            }}
-            disabled={bootstrapMutation.isPending}
-            activeOpacity={0.8}
-          >
-            {bootstrapMutation.isPending ? (
-              <>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[styles.actionBtnText, { color: colors.primary }]}>Fetching Kenya data…</Text>
-              </>
-            ) : (
-              <>
-                <Feather name="download" size={14} color="#fff" />
-                <Text style={styles.actionBtnText}>
-                  {bootstrapMutation.isSuccess ? "Re-seed Historical Data" : "Seed Historical Data"}
-                </Text>
-              </>
-            )}
           </TouchableOpacity>
         </View>
 
