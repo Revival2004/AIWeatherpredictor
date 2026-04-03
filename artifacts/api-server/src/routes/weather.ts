@@ -8,12 +8,15 @@ import { generateAlerts } from "../lib/alertsService.js";
 import { collectAllLocations } from "../lib/schedulerService.js";
 import { getPredictionAccuracy } from "../lib/feedbackService.js";
 import { trainModel, predictRain, loadModel } from "../lib/mlService.js";
+import { getPlantingAdvisory } from "../lib/plantingAdvisoryService.js";
 import {
   GetWeatherQueryParams,
   GetWeatherResponse,
   GetWeatherHistoryQueryParams,
   GetWeatherHistoryResponse,
   GetWeatherStatsResponse,
+  GetPlantingAdvisoryQueryParams,
+  GetPlantingAdvisoryResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -857,6 +860,32 @@ router.get("/weather/community", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Community nearby query failed");
     res.status(500).json({ error: "Failed to fetch community data." });
+  }
+});
+
+/**
+ * GET /weather/planting-advisory
+ * Analyses the 14-day forecast + historical rain patterns to determine whether
+ * current rains are safe to plant into, or a false onset likely to stop.
+ * This addresses one of the most damaging patterns in Kenyan smallholder
+ * farming: planting at first rains, only for them to stop for 4–8 weeks.
+ */
+router.get("/weather/planting-advisory", async (req, res): Promise<void> => {
+  const parsed = GetPlantingAdvisoryQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { lat, lon } = parsed.data;
+
+  try {
+    const advisory = await getPlantingAdvisory(lat, lon);
+    const validated = GetPlantingAdvisoryResponse.parse(advisory);
+    res.json(validated);
+  } catch (err) {
+    req.log.error({ err }, "Planting advisory failed");
+    res.status(500).json({ error: "Failed to compute planting advisory. Please try again." });
   }
 });
 

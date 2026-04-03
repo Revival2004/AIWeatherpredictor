@@ -400,6 +400,33 @@ export const GetMetricsResponse = zod.object({
 });
 
 /**
+ * Returns a planting safety advisory based on 14-day forecast and historical
+ * rain patterns for this location and month. Detects false rain onsets.
+ * @summary Planting safety advisory
+ */
+export const GetPlantingAdvisoryQueryParams = zod.object({
+  lat: zod.coerce.number().describe("Latitude"),
+  lon: zod.coerce.number().describe("Longitude"),
+});
+
+export const GetPlantingAdvisoryResponse = zod.object({
+  status: zod.enum(["safe", "watch", "caution", "danger"]),
+  rainDaysAhead: zod.number().describe("Rain days forecast in next 14 days (probability >= 40%)"),
+  longestDryGap: zod.number().describe("Longest consecutive dry-day stretch in next 14 days"),
+  historicalRainRate: zod.number().describe("% of days historically rainy in this month at this location"),
+  season: zod.enum(["long-rains", "short-rains", "off-season"]),
+  headlineEn: zod.string(),
+  headlineSw: zod.string(),
+  headlineKi: zod.string(),
+  reasonEn: zod.string(),
+  reasonSw: zod.string(),
+  reasonKi: zod.string(),
+  actionEn: zod.string(),
+  actionSw: zod.string(),
+  actionKi: zod.string(),
+});
+
+/**
  * Trains the logistic regression model on all historical weather observations. Returns training accuracy and number of samples used.
  * @summary Retrain the ML model
  */

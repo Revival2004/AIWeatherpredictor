@@ -31,9 +31,11 @@ import type {
   GetWeatherForecastParams,
   GetWeatherHistoryParams,
   GetWeatherParams,
+  GetPlantingAdvisoryParams,
   HealthStatus,
   LocationsResponse,
   MetricsResponse,
+  PlantingAdvisoryResponse,
   RainPredictionResponse,
   TrainResponse,
   WeatherPredictionResponse,
@@ -1343,3 +1345,84 @@ export const useTrainModel = <
 > => {
   return useMutation(getTrainModelMutationOptions(options));
 };
+
+// ─── Planting Advisory ────────────────────────────────────────────────────────
+
+export const getGetPlantingAdvisoryUrl = (params: GetPlantingAdvisoryParams) => {
+  const p = new URLSearchParams();
+  p.append("lat", String(params.lat));
+  p.append("lon", String(params.lon));
+  return `/api/weather/planting-advisory?${p.toString()}`;
+};
+
+export const getPlantingAdvisory = async (
+  params: GetPlantingAdvisoryParams,
+  options?: RequestInit,
+): Promise<PlantingAdvisoryResponse> => {
+  return customFetch<PlantingAdvisoryResponse>(
+    getGetPlantingAdvisoryUrl(params),
+    { ...options, method: "GET" },
+  );
+};
+
+export const getGetPlantingAdvisoryQueryKey = (params?: GetPlantingAdvisoryParams) => {
+  return [`/api/weather/planting-advisory`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetPlantingAdvisoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPlantingAdvisory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetPlantingAdvisoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPlantingAdvisory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetPlantingAdvisoryQueryKey(params);
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPlantingAdvisory>>
+  > = ({ signal }) => getPlantingAdvisory(params, { signal, ...requestOptions });
+  return {
+    queryKey,
+    queryFn,
+    enabled: params.lat !== 0 && params.lon !== 0,
+    staleTime: 60 * 60 * 1000, // 1 hour — forecast doesn't change minute to minute
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPlantingAdvisory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPlantingAdvisoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPlantingAdvisory>>
+>;
+export type GetPlantingAdvisoryQueryError = ErrorType<ErrorResponse>;
+
+export function useGetPlantingAdvisory<
+  TData = Awaited<ReturnType<typeof getPlantingAdvisory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetPlantingAdvisoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPlantingAdvisory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPlantingAdvisoryQueryOptions(params, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}

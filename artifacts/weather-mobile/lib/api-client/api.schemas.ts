@@ -423,3 +423,28 @@ export type DeleteLocation200 = {
   deleted: boolean;
   location: TrackedLocation;
 };
+
+export type PlantingAdvisoryStatus = "safe" | "watch" | "caution" | "danger";
+export type PlantingAdvisorySeason = "long-rains" | "short-rains" | "off-season";
+
+export interface PlantingAdvisoryResponse {
+  status: PlantingAdvisoryStatus;
+  rainDaysAhead: number;
+  longestDryGap: number;
+  historicalRainRate: number;
+  season: PlantingAdvisorySeason;
+  headlineEn: string;
+  headlineSw: string;
+  headlineKi: string;
+  reasonEn: string;
+  reasonSw: string;
+  reasonKi: string;
+  actionEn: string;
+  actionSw: string;
+  actionKi: string;
+}
+
+export type GetPlantingAdvisoryParams = {
+  lat: number;
+  lon: number;
+};

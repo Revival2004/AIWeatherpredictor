@@ -25,12 +25,14 @@ import {
   useGetWeather,
   useGetWeatherAlerts,
   useGetRainPrediction,
+  useGetPlantingAdvisory,
   getGetWeatherQueryKey,
   getGetWeatherAlertsQueryKey,
   getGetRainPredictionQueryKey,
   type WeatherPredictionResponse,
   type RainPredictionResponse,
 } from "@/lib/api-client";
+import PlantingAdvisoryCard from "@/components/PlantingAdvisoryCard";
 import { WeatherHeroCard } from "@/components/WeatherHeroCard";
 import AlertsBanner from "@/components/AlertsBanner";
 import CommunityInsightCard from "@/components/CommunityInsightCard";
@@ -344,6 +346,15 @@ export default function DashboardScreen() {
         queryKey: getGetRainPredictionQueryKey({ lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 }),
         enabled: fetchEnabled && coords !== null,
         staleTime: 5 * 60 * 1000,
+      },
+    }
+  );
+
+  const { data: plantingAdvisory } = useGetPlantingAdvisory(
+    { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
+    {
+      query: {
+        enabled: fetchEnabled && coords !== null,
       },
     }
   );
@@ -785,6 +796,17 @@ export default function DashboardScreen() {
                 lat={coords.latitude}
                 lon={coords.longitude}
               />
+            )}
+
+            {/* Planting Advisory — false-onset detection */}
+            {plantingAdvisory && (
+              <>
+                <Text style={styles.sectionLabel}>PLANTING ADVISORY</Text>
+                <PlantingAdvisoryCard
+                  data={plantingAdvisory}
+                  lang={language}
+                />
+              </>
             )}
 
             <Text style={styles.sectionLabel}>FARMING TIP</Text>
