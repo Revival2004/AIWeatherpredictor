@@ -1,16 +1,21 @@
 """
 FarmPal Historical Weather Seed
 ---------------------------------
-Fetches 1 full year (2024) of real hourly weather data from
+Fetches 10 full years (2015-2024) of real hourly weather data from
 Open-Meteo's free historical archive for 7 major Kenyan farming
 locations and inserts it into weather_data so the sklearn ensemble
-(LR + RF + GB) has thousands of training pairs from day one on any
-fresh deployment — Railway, Render, or any server.
+(LR + RF + GB) has ~610,000 labeled training pairs from day one on
+any fresh deployment — Railway, Render, or any server.
+
+10 years captures Kenya's full seasonal cycles:
+  - Long rains (March-May), Short rains (Oct-Dec)
+  - El Nino / La Nina drought years
+  - Elevation-driven microclimate variation across all 7 sites
 
 Usage (run once after deploy, from repo root):
     python3 artifacts/api-server/ml/seed_historical.py
 
-Safe to re-run — uses ON CONFLICT DO NOTHING so no duplicates.
+Safe to re-run — skips automatically if data already present.
 """
 
 import os
@@ -44,9 +49,10 @@ LOCATIONS = [
     {"name": "Nyeri",   "lat": -0.4167, "lon": 36.9500},
 ]
 
-# 1 full year — gives ~8 760 hourly observations per location
-# and thousands of rain/no-rain labeled pairs for the ensemble
-START_DATE = "2024-01-01"
+# 10 full years — gives ~87,600 hourly observations per location
+# = ~613,000 total rows across 7 Kenyan sites
+# Captures long rains, short rains, El Niño, La Niña, and drought years
+START_DATE = "2015-01-01"
 END_DATE   = "2024-12-31"
 
 # WMO weather codes that mean rain is happening
