@@ -15,7 +15,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "YOUR_RENDER_API_URL_HERE"
+        "EXPO_PUBLIC_DOMAIN": "https://farmpal-api.onrender.com"
       },
       "android": {
         "buildType": "apk"
@@ -23,7 +23,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "YOUR_RENDER_API_URL_HERE"
+        "EXPO_PUBLIC_DOMAIN": "https://farmpal-api.onrender.com"
       },
       "android": {
         "buildType": "app-bundle"
