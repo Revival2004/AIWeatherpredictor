@@ -15,7 +15,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "FarmPal.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "YOUR_RENDER_API_URL_HERE"
       },
       "android": {
         "buildType": "apk"
@@ -23,7 +23,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "FarmPal.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "YOUR_RENDER_API_URL_HERE"
       },
       "android": {
         "buildType": "app-bundle"
