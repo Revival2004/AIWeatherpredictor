@@ -41,34 +41,75 @@ router.get("/weather", async (req, res): Promise<void> => {
     return;
   }
 
-  // Fetch recent historical records to enable pattern learning.
-  // We use the last 100 readings globally (not location-filtered) so the AI
-  // can learn from any accumulated data, even from different locations.
+  // Fetch recent historical records for pattern learning — location-aware.
+  // Priority: nearby readings first (within ~100 km), expanding to ~300 km
+  // if not enough local data, so predictions reflect the farmer's actual microclimate.
   let history: HistoricalRecord[] = [];
   try {
-    const rows = await db
-      .select({
-        temperature: weatherDataTable.temperature,
-        windspeed: weatherDataTable.windspeed,
-        humidity: weatherDataTable.humidity,
-        pressure: weatherDataTable.pressure,
-        weathercode: weatherDataTable.weathercode,
-        prediction: weatherDataTable.prediction,
-        confidence: weatherDataTable.confidence,
-      })
+    // 1 degree latitude ≈ 111 km. 0.9 degrees ≈ ~100 km radius.
+    const NEAR_DEG  = 0.9;   // ~100 km — primary radius
+    const FAR_DEG   = 2.7;   // ~300 km — fallback radius
+    const MIN_LOCAL = 5;     // minimum local records before expanding
+
+    const selectFields = {
+      temperature: weatherDataTable.temperature,
+      windspeed:   weatherDataTable.windspeed,
+      humidity:    weatherDataTable.humidity,
+      pressure:    weatherDataTable.pressure,
+      weathercode: weatherDataTable.weathercode,
+      prediction:  weatherDataTable.prediction,
+      confidence:  weatherDataTable.confidence,
+    };
+
+    const toRecord = (r: typeof selectFields) => ({
+      temperature: r.temperature,
+      windspeed:   r.windspeed,
+      humidity:    r.humidity,
+      pressure:    r.pressure,
+      weathercode: r.weathercode,
+      prediction:  r.prediction,
+      confidence:  r.confidence,
+    });
+
+    // Try local (~100 km) first
+    const localRows = await db
+      .select(selectFields)
       .from(weatherDataTable)
+      .where(
+        and(
+          gte(weatherDataTable.latitude,  lat - NEAR_DEG),
+          lte(weatherDataTable.latitude,  lat + NEAR_DEG),
+          gte(weatherDataTable.longitude, lon - NEAR_DEG),
+          lte(weatherDataTable.longitude, lon + NEAR_DEG),
+        )
+      )
       .orderBy(desc(weatherDataTable.createdAt))
       .limit(100);
 
-    history = rows.map((r) => ({
-      temperature: r.temperature,
-      windspeed: r.windspeed,
-      humidity: r.humidity,
-      pressure: r.pressure,
-      weathercode: r.weathercode,
-      prediction: r.prediction,
-      confidence: r.confidence,
-    }));
+    if (localRows.length >= MIN_LOCAL) {
+      history = localRows.map(toRecord);
+    } else {
+      // Expand to ~300 km to give kNN enough data for rural/ASAL areas
+      const widerRows = await db
+        .select(selectFields)
+        .from(weatherDataTable)
+        .where(
+          and(
+            gte(weatherDataTable.latitude,  lat - FAR_DEG),
+            lte(weatherDataTable.latitude,  lat + FAR_DEG),
+            gte(weatherDataTable.longitude, lon - FAR_DEG),
+            lte(weatherDataTable.longitude, lon + FAR_DEG),
+          )
+        )
+        .orderBy(desc(weatherDataTable.createdAt))
+        .limit(100);
+
+      history = widerRows.map(toRecord);
+
+      if (widerRows.length < MIN_LOCAL) {
+        req.log.warn({ lat, lon, localCount: localRows.length }, "Very sparse local data — kNN using global fallback");
+      }
+    }
   } catch (err) {
     // Non-fatal — fall back to pure rule-based if history fetch fails
     req.log.warn({ err }, "Could not fetch history for pattern learning, using rules only");
