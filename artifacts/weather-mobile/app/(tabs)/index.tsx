@@ -699,6 +699,12 @@ export default function DashboardScreen() {
           onRefresh={() => refetch()}
         />
 
+        {weatherError && (
+          <Text style={{ color: "red", fontSize: 11, padding: 10, fontFamily: "Inter_400Regular" }}>
+            {`DEBUG: ${(weatherError as Error)?.message ?? String(weatherError)}`}
+          </Text>
+        )}
+
         {alertsData && alertsData.alerts.length > 0 && (
           <AlertsBanner alerts={alertsData.alerts} />
         )}
