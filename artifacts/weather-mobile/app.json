@@ -35,7 +35,7 @@
       [
         "expo-router",
         {
-          "origin": "https://farmpal-api.onrender.com"
+          "origin": "https://farmpal-api-gxv9.onrender.com"
         }
       ],
       "expo-font",
