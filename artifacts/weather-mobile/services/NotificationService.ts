@@ -108,6 +108,7 @@ export async function sendRainAlert(
  */
 export async function scheduleFeedbackReminder(
   locationName: string,
+  secondsUntilReminder = 2 * 60 * 60,
 ): Promise<void> {
   if (Platform.OS === "web") return;
   const n = getNotif();
@@ -127,7 +128,7 @@ export async function scheduleFeedbackReminder(
       },
       trigger: {
         type: n.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 2 * 60 * 60,
+        seconds: Math.max(60, Math.round(secondsUntilReminder)),
         repeats: false,
       },
     });

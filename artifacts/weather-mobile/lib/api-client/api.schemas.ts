@@ -335,6 +335,25 @@ export type RainPredictionResponseCurrentConditions = {
   weathercode: number;
 };
 
+export type RainPredictionResponseCommunity = {
+  farmerCount: number;
+  feedbackCount: number;
+  sharedWeatherSamples: number;
+  recentReports: {
+    rain: number;
+    dry: number;
+    cloudy: number;
+    total: number;
+  };
+  regionalRainProbability: number | null;
+  blendWeight: number;
+  adjustment: number;
+  blendedProbability: number;
+  used: boolean;
+  signalDirection: "wetter" | "drier" | "mixed" | null;
+  zoneRadiusKm: number;
+};
+
 export interface RainPredictionResponse {
   /** Whether rain is predicted within the next 2 hours */
   predictionValue: RainPredictionResponsePredictionValue;
@@ -350,6 +369,7 @@ export interface RainPredictionResponse {
   /** Individual model probabilities before ensemble voting */
   modelProbabilities?: RainPredictionResponseModelProbabilities;
   currentConditions: RainPredictionResponseCurrentConditions;
+  community?: RainPredictionResponseCommunity;
 }
 
 export type GetWeatherParams = {

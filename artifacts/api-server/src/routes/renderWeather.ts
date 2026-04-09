@@ -16,6 +16,7 @@ import {
   addWeatherRecord,
   getLatestWeatherRecordNear,
   getWeatherStats,
+  listActiveLocations,
   listFeedbackRecords,
   listPredictionRecords,
   listWeatherRecords,
@@ -26,6 +27,11 @@ const router: IRouter = Router();
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5001";
 const ML_MODE = process.env.ML_SERVICE_URL ? "remote-python" : "fallback";
 const RAIN_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
+const COMMUNITY_RADIUS_KM = 10;
+const COMMUNITY_RADIUS_DEGREES = COMMUNITY_RADIUS_KM / 111;
+const COMMUNITY_FEEDBACK_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const COMMUNITY_WEATHER_LOOKBACK_MS = 6 * 60 * 60 * 1000;
+const MAX_COMMUNITY_BLEND_WEIGHT = 0.22;
 
 router.use(requireFarmerOrAdminAuth);
 
@@ -83,6 +89,176 @@ function getNearbyRecords<T extends { latitude: number; longitude: number }>(
   ));
 }
 
+function clampProbability(value: number): number {
+  return Math.min(0.98, Math.max(0.02, value));
+}
+
+function weightedAverage(values: Array<{ value: number; weight: number }>): number | null {
+  const valid = values.filter((entry) => Number.isFinite(entry.value) && entry.weight > 0);
+  if (valid.length === 0) {
+    return null;
+  }
+
+  const totalWeight = valid.reduce((sum, entry) => sum + entry.weight, 0);
+  if (totalWeight <= 0) {
+    return null;
+  }
+
+  return valid.reduce((sum, entry) => sum + entry.value * entry.weight, 0) / totalWeight;
+}
+
+type CommunitySignalDirection = "wetter" | "drier" | "mixed";
+
+interface CommunityPredictionSignal {
+  farmerCount: number;
+  feedbackCount: number;
+  sharedWeatherSamples: number;
+  recentReports: { rain: number; dry: number; cloudy: number; total: number };
+  regionalRainProbability: number | null;
+  blendWeight: number;
+  used: boolean;
+  signalDirection: CommunitySignalDirection | null;
+  zoneRadiusKm: number;
+}
+
+function getSignalDirection(probability: number | null): CommunitySignalDirection | null {
+  if (probability === null) {
+    return null;
+  }
+
+  if (probability >= 0.6) {
+    return "wetter";
+  }
+
+  if (probability <= 0.4) {
+    return "drier";
+  }
+
+  return "mixed";
+}
+
+async function getCommunityPredictionSignal(
+  lat: number,
+  lon: number,
+  excludeFarmerId?: number,
+): Promise<CommunityPredictionSignal> {
+  const now = Date.now();
+  const [activeLocations, feedbackRows, weatherRows] = await Promise.all([
+    listActiveLocations(),
+    listFeedbackRecords(),
+    listWeatherRecords({ lat, lon, radiusDegrees: COMMUNITY_RADIUS_DEGREES, limit: 200 }),
+  ]);
+
+  const nearbyFarmers = new Set<number>();
+  for (const location of activeLocations) {
+    if (!location.active || location.farmerId == null) {
+      continue;
+    }
+
+    if (!getNearbyRecords([location], lat, lon, COMMUNITY_RADIUS_DEGREES).length) {
+      continue;
+    }
+
+    if (excludeFarmerId != null && location.farmerId === excludeFarmerId) {
+      continue;
+    }
+
+    nearbyFarmers.add(location.farmerId);
+  }
+
+  const rainFeedback = getNearbyRecords(feedbackRows, lat, lon, COMMUNITY_RADIUS_DEGREES)
+    .filter((entry) => entry.question === "rain" && entry.createdAt.getTime() >= now - COMMUNITY_FEEDBACK_LOOKBACK_MS);
+  const recentRainReports = rainFeedback.filter((entry) => entry.answer === "yes").length;
+  const recentDryReports = rainFeedback.filter((entry) => entry.answer === "no").length;
+  const recentCloudyReports = rainFeedback.filter((entry) => entry.answer === "almost").length;
+
+  const feedbackSignal = rainFeedback.length > 0
+    ? (recentRainReports + recentCloudyReports * 0.5) / rainFeedback.length
+    : null;
+
+  const recentWeather = weatherRows.filter((entry) => entry.createdAt.getTime() >= now - COMMUNITY_WEATHER_LOOKBACK_MS);
+  const sharedWeatherSamples = recentWeather.length;
+  const weatherSignal = sharedWeatherSamples > 0
+    ? recentWeather.filter((entry) => RAIN_CODES.has(entry.weathercode)).length / sharedWeatherSamples
+    : null;
+
+  const regionalRainProbability = weightedAverage([
+    {
+      value: feedbackSignal ?? NaN,
+      weight: Math.min(0.16, rainFeedback.length * 0.04),
+    },
+    {
+      value: weatherSignal ?? NaN,
+      weight: Math.min(0.1, sharedWeatherSamples * 0.015),
+    },
+  ]);
+
+  const blendWeight = regionalRainProbability === null || nearbyFarmers.size === 0
+    ? 0
+    : Math.min(
+        MAX_COMMUNITY_BLEND_WEIGHT,
+        Math.max(0.04, nearbyFarmers.size * 0.03 + rainFeedback.length * 0.015 + sharedWeatherSamples * 0.008),
+      );
+
+  return {
+    farmerCount: nearbyFarmers.size,
+    feedbackCount: rainFeedback.length,
+    sharedWeatherSamples,
+    recentReports: {
+      rain: recentRainReports,
+      dry: recentDryReports,
+      cloudy: recentCloudyReports,
+      total: rainFeedback.length,
+    },
+    regionalRainProbability:
+      regionalRainProbability === null ? null : Number(regionalRainProbability.toFixed(3)),
+    blendWeight: Number(blendWeight.toFixed(3)),
+    used: blendWeight > 0 && regionalRainProbability !== null,
+    signalDirection: getSignalDirection(regionalRainProbability),
+    zoneRadiusKm: COMMUNITY_RADIUS_KM,
+  };
+}
+
+function applyCommunitySignal(
+  prediction: Awaited<ReturnType<typeof predictRain>>,
+  community: CommunityPredictionSignal,
+) {
+  if (!community.used || community.regionalRainProbability === null) {
+    return {
+      ...prediction,
+      community: {
+        ...community,
+        adjustment: 0,
+        blendedProbability: prediction.probability,
+      },
+    };
+  }
+
+  const blendedProbability = clampProbability(
+    prediction.probability * (1 - community.blendWeight) +
+      community.regionalRainProbability * community.blendWeight,
+  );
+  const adjustment = Number((blendedProbability - prediction.probability).toFixed(3));
+  const aligned =
+    (prediction.probability >= 0.5 && community.regionalRainProbability >= 0.5) ||
+    (prediction.probability < 0.5 && community.regionalRainProbability < 0.5);
+  const adjustedConfidence = clampProbability(
+    prediction.confidence + (aligned ? 0.04 : -0.05) + community.blendWeight * 0.08,
+  );
+
+  return {
+    ...prediction,
+    predictionValue: blendedProbability >= 0.5 ? "yes" as const : "no" as const,
+    probability: Number(blendedProbability.toFixed(4)),
+    confidence: Number(adjustedConfidence.toFixed(2)),
+    community: {
+      ...community,
+      adjustment,
+      blendedProbability: Number(blendedProbability.toFixed(4)),
+    },
+  };
+}
+
 function toPercent(value: number | undefined): number | null {
   if (value === undefined || value === null) {
     return null;
@@ -102,6 +278,12 @@ function buildPredictionLabel(predictionValue: "yes" | "no"): string {
 function buildPredictionReasoning(
   weather: Awaited<ReturnType<typeof fetchWeather>>,
   probability: number,
+  community?: {
+    used: boolean;
+    farmerCount: number;
+    signalDirection: CommunitySignalDirection | null;
+    zoneRadiusKm: number;
+  },
 ): string {
   const chance = Math.round(probability * 100);
   const notes = [`The Python ML model estimates a ${chance}% chance of rain in the next 2 hours.`];
@@ -114,6 +296,16 @@ function buildPredictionReasoning(
     notes.push("Pressure is relatively low, which can support unstable weather.");
   } else {
     notes.push("Current conditions look fairly stable at the moment.");
+  }
+
+  if (community?.used && community.farmerCount > 0) {
+    const directionNote =
+      community.signalDirection === "wetter"
+        ? "Nearby farmer conditions are leaning wetter than usual."
+        : community.signalDirection === "drier"
+        ? "Nearby farmer conditions are leaning drier than usual."
+        : "Nearby farmer conditions are mixed, so the regional signal is being used cautiously.";
+    notes.push(`${community.farmerCount} nearby farmer${community.farmerCount === 1 ? "" : "s"} within ${community.zoneRadiusKm} km are contributing shared regional signal. ${directionNote}`);
   }
 
   return notes.join(" ");
@@ -186,7 +378,8 @@ router.get("/weather", async (req, res): Promise<void> => {
     weather.pressure = localPressure * 0.8 + weather.pressure * 0.2;
   }
 
-  const rainPrediction = await predictRain(
+  const actor = getAuthenticatedActorFromRequest(req);
+  const basePrediction = await predictRain(
     weather.temperature,
     weather.humidity,
     weather.pressure,
@@ -197,8 +390,14 @@ router.get("/weather", async (req, res): Promise<void> => {
     lon,
     weather.elevation,
   );
+  const communitySignal = await getCommunityPredictionSignal(
+    lat,
+    lon,
+    actor.role === "farmer" ? actor.farmerSession.id : undefined,
+  );
+  const rainPrediction = applyCommunitySignal(basePrediction, communitySignal);
   const predictionLabel = buildPredictionLabel(rainPrediction.predictionValue);
-  const reasoning = buildPredictionReasoning(weather, rainPrediction.probability);
+  const reasoning = buildPredictionReasoning(weather, rainPrediction.probability, rainPrediction.community);
   const advice = buildFarmingAdvice(weather, rainPrediction.predictionValue, rainPrediction.probability);
 
   const nearbyHistory = await listWeatherRecords({ lat, lon, radiusDegrees: 2.7, limit: 100 });
@@ -233,6 +432,7 @@ router.get("/weather", async (req, res): Promise<void> => {
       dataPoints: nearbyHistory.length,
       modelVersion: rainPrediction.modelVersion,
       modelUsed: rainPrediction.modelUsed,
+      community: rainPrediction.community,
     },
     location: { lat, lon },
     recordId: record.id,
@@ -398,7 +598,8 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
 
   try {
     const weather = await fetchWeather(parsed.data.lat, parsed.data.lon);
-    const prediction = await predictRain(
+    const actor = getAuthenticatedActorFromRequest(req);
+    const basePrediction = await predictRain(
       weather.temperature,
       weather.humidity,
       weather.pressure,
@@ -409,6 +610,12 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
       parsed.data.lon,
       weather.elevation,
     );
+    const communitySignal = await getCommunityPredictionSignal(
+      parsed.data.lat,
+      parsed.data.lon,
+      actor.role === "farmer" ? actor.farmerSession.id : undefined,
+    );
+    const prediction = applyCommunitySignal(basePrediction, communitySignal);
     const advice = buildFarmingAdvice(weather, prediction.predictionValue, prediction.probability);
 
     const targetTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
@@ -445,6 +652,7 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
       rain: prediction.predictionValue === "yes",
       advice,
       model_used: prediction.modelUsed,
+      community: prediction.community,
       mlMode: ML_MODE,
     });
   } catch (error) {
@@ -610,20 +818,14 @@ router.get("/weather/community", async (req, res): Promise<void> => {
     return;
   }
 
+  const actor = getAuthenticatedActorFromRequest(req);
   const { lat, lon } = parsed.data;
-  const radiusDegrees = 0.135;
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-
-  const feedback = getNearbyRecords(await listFeedbackRecords(), lat, lon, radiusDegrees)
-    .filter((entry) => entry.createdAt.getTime() >= thirtyDaysAgo);
-
-  const uniqueZones = new Set(
-    feedback.map((entry) => `${Math.round(entry.latitude * 100) / 100},${Math.round(entry.longitude * 100) / 100}`),
+  const community = await getCommunityPredictionSignal(
+    lat,
+    lon,
+    actor.role === "farmer" ? actor.farmerSession.id : undefined,
   );
-
-  const recent = feedback.filter((entry) => entry.createdAt.getTime() >= oneDayAgo);
-  const predictions = getNearbyRecords(await listPredictionRecords(), lat, lon, radiusDegrees)
+  const predictions = getNearbyRecords(await listPredictionRecords(), lat, lon, COMMUNITY_RADIUS_DEGREES)
     .filter((entry) => entry.isCorrect !== null);
 
   const correct = predictions.filter((entry) => entry.isCorrect === true).length;
@@ -632,17 +834,16 @@ router.get("/weather/community", async (req, res): Promise<void> => {
     : null;
 
   res.json({
-    farmerCount: uniqueZones.size,
-    feedbackCount: feedback.length,
-    recentReports: {
-      rain: recent.filter((entry) => entry.answer === "yes").length,
-      dry: recent.filter((entry) => entry.answer === "no").length,
-      cloudy: recent.filter((entry) => entry.answer === "almost").length,
-      total: recent.length,
-    },
+    farmerCount: community.farmerCount,
+    feedbackCount: community.feedbackCount,
+    recentReports: community.recentReports,
     zoneAccuracy,
-    communityBoost: feedback.length >= 3,
-    zoneRadiusKm: 15,
+    communityBoost: community.used,
+    zoneRadiusKm: community.zoneRadiusKm,
+    regionalRainProbability: community.regionalRainProbability,
+    blendWeight: community.blendWeight,
+    signalDirection: community.signalDirection,
+    sharedWeatherSamples: community.sharedWeatherSamples,
   });
 });
 

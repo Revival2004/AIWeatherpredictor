@@ -3,8 +3,12 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
-import { sendRainAlert } from "@/services/NotificationService";
+import { scheduleFeedbackReminder, sendRainAlert } from "@/services/NotificationService";
 import { useBarometer } from "@/hooks/useBarometer";
+import FarmerFeedbackCard, {
+  FEEDBACK_PENDING_KEY,
+  type PendingFeedback,
+} from "@/components/FarmerFeedbackCard";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import OnboardingModal from "@/components/OnboardingModal";
@@ -76,10 +80,19 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
   const pct = Math.round(data.probability * 100);
   const isSklearn = data.modelVersion?.startsWith("sklearn");
   const mp = data.modelProbabilities;
+  const community = data.community;
 
   // Colour theme: red >= 60%, amber 30-60%, green < 30%
   const accentColor = pct >= 60 ? "#EF4444" : pct >= 30 ? "#F59E0B" : "#10B981";
   const bgColor = pct >= 60 ? "#FEF2F2" : pct >= 30 ? "#FFFBEB" : "#F0FDF4";
+  const communityMessage =
+    community?.used && community.farmerCount > 0
+      ? community.signalDirection === "wetter"
+        ? `${community.farmerCount} nearby farmer${community.farmerCount === 1 ? "" : "s"} within ${community.zoneRadiusKm} km are reporting wetter conditions, which lifts this forecast slightly.`
+        : community.signalDirection === "drier"
+        ? `${community.farmerCount} nearby farmer${community.farmerCount === 1 ? "" : "s"} within ${community.zoneRadiusKm} km are seeing drier conditions, which pulls this forecast down slightly.`
+        : `${community.farmerCount} nearby farmer${community.farmerCount === 1 ? "" : "s"} within ${community.zoneRadiusKm} km are contributing a mixed regional signal.`
+      : null;
 
   return (
     <View
@@ -189,6 +202,34 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
           ))}
         </View>
       )}
+
+      {communityMessage ? (
+        <View
+          style={{
+            borderTopWidth: 1,
+            borderColor: colors.border,
+            paddingHorizontal: 18,
+            paddingVertical: 12,
+            backgroundColor: "#F8FAFC",
+            flexDirection: "row",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          <Feather name="users" size={14} color="#2563EB" style={{ marginTop: 1 }} />
+          <Text
+            style={{
+              flex: 1,
+              fontSize: 11,
+              lineHeight: 17,
+              fontFamily: "Inter_500Medium",
+              color: colors.foreground,
+            }}
+          >
+            {communityMessage}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -196,6 +237,25 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
 const CACHE_KEY_PREFIX = "weather_cache_v1_";
 const LAST_LOC_KEY = "microclimate_last_location_v1";
 const LEGACY_DEFAULT_COORDS = { latitude: -0.3031, longitude: 36.08 };
+
+function isPendingFeedbackStale(pending: PendingFeedback, now = Date.now()): boolean {
+  return now - pending.dueAt > 24 * 60 * 60 * 1000;
+}
+
+function getPendingFeedbackKey(pending: Pick<PendingFeedback, "lat" | "lon" | "targetTime">): string {
+  return `${pending.lat.toFixed(4)}:${pending.lon.toFixed(4)}:${pending.targetTime}`;
+}
+
+function formatFeedbackCountdown(dueAt: number, now: number): string {
+  const minutes = Math.max(0, Math.round((dueAt - now) / 60000));
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder === 0 ? `${hours} hr` : `${hours} hr ${remainder} min`;
+}
 
 function isLegacyStoredDefault(saved: unknown): boolean {
   if (!saved || typeof saved !== "object") return false;
@@ -287,6 +347,10 @@ export default function DashboardScreen() {
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [locationUpdated, setLocationUpdated] = useState(false);
+  const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
+  const [feedbackDismissed, setFeedbackDismissed] = useState(false);
+  const [feedbackNow, setFeedbackNow] = useState(Date.now());
+  const lastFeedbackKeyRef = useRef<string | null>(null);
 
   // Haversine distance in km between two coordinates
   const distanceKm = (a: Coords, b: Coords): number => {
@@ -396,6 +460,49 @@ export default function DashboardScreen() {
       tryGps(false);
     });
   }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(FEEDBACK_PENDING_KEY)
+      .then((raw) => {
+        if (!raw) {
+          return;
+        }
+
+        const parsed = JSON.parse(raw) as PendingFeedback;
+        if (!parsed || typeof parsed !== "object" || isPendingFeedbackStale(parsed)) {
+          AsyncStorage.removeItem(FEEDBACK_PENDING_KEY).catch(() => {});
+          return;
+        }
+
+        lastFeedbackKeyRef.current = getPendingFeedbackKey(parsed);
+        setPendingFeedback(parsed);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!pendingFeedback) {
+      setFeedbackDismissed(false);
+      return;
+    }
+
+    setFeedbackNow(Date.now());
+    const interval = setInterval(() => {
+      setFeedbackNow(Date.now());
+    }, 30_000);
+
+    return () => clearInterval(interval);
+  }, [pendingFeedback]);
+
+  useEffect(() => {
+    if (!pendingFeedback || !isPendingFeedbackStale(pendingFeedback)) {
+      return;
+    }
+
+    AsyncStorage.removeItem(FEEDBACK_PENDING_KEY).catch(() => {});
+    setPendingFeedback(null);
+    setFeedbackDismissed(false);
+  }, [pendingFeedback, feedbackNow]);
 
   const baro = useBarometer();
 
@@ -542,6 +649,49 @@ export default function DashboardScreen() {
     }
   }, [rainData, locationLabel]);
 
+  useEffect(() => {
+    if (!rainData || !coords) {
+      return;
+    }
+
+    if (pendingFeedback && !isPendingFeedbackStale(pendingFeedback)) {
+      return;
+    }
+
+    const dueAt = new Date(rainData.targetTime).getTime();
+    if (!Number.isFinite(dueAt)) {
+      return;
+    }
+
+    const nextPending: PendingFeedback = {
+      lat: coords.latitude,
+      lon: coords.longitude,
+      locationName: locationLabel ?? "your farm",
+      predictedAt: Date.now(),
+      targetTime: rainData.targetTime,
+      dueAt,
+      predictionValue: rainData.predictionValue,
+      probability: rainData.probability,
+    };
+    const feedbackKey = getPendingFeedbackKey(nextPending);
+
+    if (lastFeedbackKeyRef.current === feedbackKey) {
+      return;
+    }
+
+    lastFeedbackKeyRef.current = feedbackKey;
+    setPendingFeedback(nextPending);
+    setFeedbackDismissed(false);
+    AsyncStorage.setItem(FEEDBACK_PENDING_KEY, JSON.stringify(nextPending)).catch(() => {});
+
+    if (dueAt > Date.now()) {
+      scheduleFeedbackReminder(
+        nextPending.locationName,
+        Math.round((dueAt - Date.now()) / 1000),
+      ).catch(() => {});
+    }
+  }, [coords, locationLabel, pendingFeedback, rainData]);
+
   const isLoading = geoLoading || weatherLoading;
 
   const styles = StyleSheet.create({
@@ -642,6 +792,56 @@ export default function DashboardScreen() {
       color: colors.secondary,
       lineHeight: 19,
     },
+    followUpCard: {
+      marginHorizontal: 16,
+      marginTop: 10,
+      borderRadius: 18,
+      padding: 16,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: 14,
+    },
+    followUpRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    followUpIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#3B82F615",
+    },
+    followUpMeta: {
+      flex: 1,
+      gap: 4,
+    },
+    followUpTitle: {
+      fontSize: 15,
+      fontFamily: "Inter_700Bold",
+      color: colors.foreground,
+    },
+    followUpText: {
+      fontSize: 12,
+      lineHeight: 18,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+    },
+    followUpPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: `${colors.primary}14`,
+      alignSelf: "flex-start",
+    },
+    followUpPillText: {
+      fontSize: 11,
+      fontFamily: "Inter_700Bold",
+      color: colors.primary,
+    },
     locErrorText: {
       textAlign: "center",
       fontSize: 12,
@@ -652,6 +852,14 @@ export default function DashboardScreen() {
   });
 
   const farmingTip = getFarmingTip(weatherData, t);
+  const feedbackDue = pendingFeedback ? feedbackNow >= pendingFeedback.dueAt : false;
+  const feedbackCountdown = pendingFeedback ? formatFeedbackCountdown(pendingFeedback.dueAt, feedbackNow) : null;
+  const feedbackTimeLabel = pendingFeedback
+    ? new Date(pendingFeedback.dueAt).toLocaleTimeString("en-KE", {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
 
   return (
     <View style={styles.container}>
@@ -904,6 +1112,41 @@ export default function DashboardScreen() {
                   }
                 />
                 <RainPredictionCard data={rainData} />
+                {pendingFeedback && !feedbackDue ? (
+                  <View style={styles.followUpCard}>
+                    <View style={styles.followUpRow}>
+                      <View style={styles.followUpIcon}>
+                        <Feather name="message-circle" size={18} color="#3B82F6" />
+                      </View>
+                      <View style={styles.followUpMeta}>
+                        <Text style={styles.followUpTitle}>We will follow up on this prediction</Text>
+                        <Text style={styles.followUpText}>
+                          Around {feedbackTimeLabel}, FarmPal will ask whether it actually rained at {pendingFeedback.locationName}.
+                          One quick answer helps the model learn your field faster.
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.followUpPill}>
+                      <Text style={styles.followUpPillText}>Feedback opens in {feedbackCountdown}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                {pendingFeedback && feedbackDue && !feedbackDismissed ? (
+                  <>
+                    <SectionHeader
+                      title="How did the weather turn out?"
+                      subtitle="Your answer teaches FarmPal what really happened on this field."
+                    />
+                    <FarmerFeedbackCard
+                      pending={pendingFeedback}
+                      onClose={() => setFeedbackDismissed(true)}
+                      onComplete={() => {
+                        setPendingFeedback(null);
+                        setFeedbackDismissed(false);
+                      }}
+                    />
+                  </>
+                ) : null}
               </>
             )}
 

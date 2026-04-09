@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { customFetch } from "@/lib/api-client/custom-fetch";
+import { cancelFeedbackReminder } from "@/services/NotificationService";
 
 export const FEEDBACK_PENDING_KEY = "microclimate_feedback_pending_v1";
 
@@ -14,17 +15,22 @@ export interface PendingFeedback {
   lon: number;
   locationName: string;
   predictedAt: number;
+  targetTime: string;
+  dueAt: number;
+  predictionValue: "yes" | "no";
+  probability: number;
 }
 
 interface Props {
   pending: PendingFeedback;
-  onDismiss: () => void;
+  onClose: () => void;
+  onComplete: () => void;
 }
 
 type Answer = "yes" | "almost" | "no";
 type Step = "rain" | "cloudy" | "done";
 
-export default function FarmerFeedbackCard({ pending, onDismiss }: Props) {
+export default function FarmerFeedbackCard({ pending, onClose, onComplete }: Props) {
   const colors = useColors();
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>("rain");
@@ -62,13 +68,20 @@ export default function FarmerFeedbackCard({ pending, onDismiss }: Props) {
     await submitFeedback("cloudy", answer);
     setStep("done");
     await AsyncStorage.removeItem(FEEDBACK_PENDING_KEY);
-    setTimeout(onDismiss, 1200);
+    await cancelFeedbackReminder().catch(() => {});
+    setTimeout(onComplete, 1200);
   };
 
-  const handleSkip = async () => {
-    await AsyncStorage.removeItem(FEEDBACK_PENDING_KEY);
-    onDismiss();
+  const handleSkip = () => {
+    onClose();
   };
+
+  const hoursAgo = Math.max(1, Math.round((Date.now() - pending.predictedAt) / (1000 * 60 * 60)));
+  const followUpSummary =
+    pending.predictionValue === "yes"
+      ? `About ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago, FarmPal expected rain at ${pending.locationName}.`
+      : `About ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago, FarmPal expected mostly dry conditions at ${pending.locationName}.`;
+  const followUpDetail = `Your answer helps the model learn what really happened on your field.`;
 
   return (
     <View
@@ -92,7 +105,10 @@ export default function FarmerFeedbackCard({ pending, onDismiss }: Props) {
                 {t("feedbackTitle")}
               </Text>
               <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-                {t("feedbackSubtitle")}
+                {followUpSummary}
+              </Text>
+              <Text style={[styles.sub, { color: colors.mutedForeground, marginTop: 4 }]}>
+                {followUpDetail}
               </Text>
             </View>
             <Pressable onPress={handleSkip} hitSlop={12}>

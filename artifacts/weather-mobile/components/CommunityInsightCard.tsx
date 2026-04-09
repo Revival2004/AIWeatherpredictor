@@ -1,7 +1,7 @@
 /**
  * CommunityInsightCard
  *
- * Shows how many farmers are active in the same 15 km zone,
+ * Shows how many farmers are active in the same 10 km zone,
  * what they reported in the last 24 hours, and whether their
  * combined feedback is boosting the prediction model.
  *
@@ -22,6 +22,10 @@ interface CommunityData {
   zoneAccuracy: number | null;
   communityBoost: boolean;
   zoneRadiusKm: number;
+  regionalRainProbability?: number | null;
+  blendWeight?: number;
+  signalDirection?: "wetter" | "drier" | "mixed" | null;
+  sharedWeatherSamples?: number;
 }
 
 interface Props {
@@ -99,7 +103,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
             {farmerCount} farmer{farmerCount !== 1 ? "s" : ""} in your zone
           </Text>
           <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-            Within {zoneRadiusKm} km - {feedbackCount} reports (30 days)
+            Within {zoneRadiusKm} km - {feedbackCount} reports and {data.sharedWeatherSamples ?? 0} shared readings
           </Text>
         </View>
 
@@ -165,6 +169,52 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
           )}
         </>
       )}
+
+      {communityBoost && data.signalDirection ? (
+        <View
+          style={[
+            styles.consensus,
+            {
+              backgroundColor:
+                data.signalDirection === "wetter" ? "#EFF6FF"
+                : data.signalDirection === "drier" ? "#F0FDF4"
+                : "#F8FAFC",
+              marginTop: 10,
+            },
+          ]}
+        >
+          <Feather
+            name={
+              data.signalDirection === "wetter" ? "cloud-rain"
+              : data.signalDirection === "drier" ? "sun"
+              : "shuffle"
+            }
+            size={12}
+            color={
+              data.signalDirection === "wetter" ? "#2563EB"
+              : data.signalDirection === "drier" ? "#15803D"
+              : "#475569"
+            }
+          />
+          <Text
+            style={[
+              styles.consensusText,
+              {
+                color:
+                  data.signalDirection === "wetter" ? "#2563EB"
+                  : data.signalDirection === "drier" ? "#15803D"
+                  : "#475569",
+              },
+            ]}
+          >
+            {data.signalDirection === "wetter"
+              ? "Regional farmer data is nudging forecasts wetter in this zone."
+              : data.signalDirection === "drier"
+              ? "Regional farmer data is nudging forecasts drier in this zone."
+              : "Regional farmer data is mixed, so FarmPal is blending it carefully."}
+          </Text>
+        </View>
+      ) : null}
 
       {/* Zone accuracy */}
       {zoneAccuracy !== null && (
