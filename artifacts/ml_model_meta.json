@@ -1,9 +1,0 @@
-{
-  "version": "sklearn_ensemble_v2",
-  "trainedAt": "2026-04-03T12:04:17.016450+00:00",
-  "trainingSamples": 5000,
-  "accuracy": 77.4,
-  "lrAccuracy": 77.2,
-  "rfAccuracy": 77.5,
-  "gbAccuracy": 77.7
-}
