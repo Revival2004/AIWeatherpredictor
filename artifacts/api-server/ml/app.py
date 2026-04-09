@@ -1444,8 +1444,24 @@ if __name__ == "__main__":
 # ── Startup: run auto-bootstrap in background thread when module loads ────────
 # This works under both gunicorn (module-level execution) and direct python.
 # We delay 3 seconds so the Flask server is fully bound before training begins.
+def _should_auto_bootstrap_on_start() -> bool:
+    raw = os.environ.get("ML_AUTO_BOOTSTRAP_ON_START")
+    if raw is not None:
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    if os.environ.get("RENDER") or os.environ.get("PORT"):
+        return False
+    return True
+
+
 def _startup():
     _time.sleep(3)
     _auto_bootstrap_on_start()
 
-threading.Thread(target=_startup, daemon=True).start()
+
+if _should_auto_bootstrap_on_start():
+    log.info("Automatic ML bootstrap on startup is enabled.")
+    threading.Thread(target=_startup, daemon=True).start()
+else:
+    log.info(
+        "Automatic ML bootstrap on startup is disabled; using bundled model until /bootstrap or /train is called."
+    )
