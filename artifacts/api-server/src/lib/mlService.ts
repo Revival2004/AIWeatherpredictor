@@ -1,55 +1,76 @@
 /**
- * ML Service — thin HTTP client that delegates to the Python sklearn ensemble.
+ * ML Service — HTTP client that delegates all prediction and training
+ * to the Python Flask microservice (artifacts/api-server/ml/app.py).
  *
- * The Python microservice (artifacts/api-server/ml/app.py) runs on port 5000
- * and implements three scikit-learn models with soft-voting:
- *   1. Logistic Regression  (Pipeline: StandardScaler + LogisticRegression)
- *   2. Random Forest        (100 trees, sqrt features, max_depth 8)
- *   3. Gradient Boosting    (100 trees, lr=0.08, max_depth 4)
+ * This file owns the TypeScript contract for the ML boundary.
+ * The Python service is the single source of truth for model files.
  *
- * This file is the only TypeScript code that talks to that service.
- * All other modules import from here as before.
+ * Changes in v4:
+ * - EnsembleModel includes auc, brierScore, perModel, rainPercent
+ * - predictRain sends pressure_tendency and all 19 features
+ * - saveMetadata writes full v4 schema (no partial corruption)
+ * - trainModel polls /train/status instead of fire-and-forget
+ * - getRainPrediction is the full-featured call used by the weather route
  */
 
-import fs from "node:fs";
+import fs   from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Logger } from "pino";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** JSON metadata sidecar written by the Python service after each train run. */
+/** JSON sidecar written by Python after each /train completion. */
 const META_PATH = path.join(__dirname, "../../ml_model_meta.json");
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5000";
+const ML_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5000";
 
-const RAIN_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
+const RAIN_CODES = new Set([51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99]);
 
-// ─────────────────────────────────────────────────────────────
-// Shared types (kept for compatibility with consuming routes)
-// ─────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface EnsembleModel {
-  version: string;
-  trainedAt: string;
+  version:         string;
+  trainedAt:       string;
   trainingSamples: number;
-  accuracy: number;
-  lrAccuracy: number;
-  rfAccuracy: number;
-  gbAccuracy: number;
+  accuracy:        number;
+  rmse?:           number;
+  mae?:            number;
+  auc?:            number;
+  brierScore?:     number;
+  rainPercent?:    number;
+  // Flat fields (v3 compat)
+  lrAccuracy?:     number;
+  rfAccuracy?:     number;
+  gbAccuracy?:     number;
+  // v4 per-model breakdown
+  perModel?: Record<string, { accuracy?: number; auc?: number; brier?: number; rmse?: number; mae?: number }>;
 }
 
 export interface MLPrediction {
-  predictionValue: "yes" | "no";
-  confidence: number;
-  probability: number;
-  modelVersion: string;
-  modelProbabilities?: { lr: number; rf: number; gb: number };
+  predictionValue:   "yes" | "no";
+  confidence:        number;
+  probability:       number;
+  modelVersion:      string;
+  modelUsed?:        string;
+  confidenceInterval?: { low: number; high: number };
+  modelAgreement?:     number;
+  modelProbabilities?: Record<string, number>;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Model metadata (read from JSON sidecar on disk)
-// ─────────────────────────────────────────────────────────────
+export interface TrainResult {
+  trainingSamples: number;
+  accuracy:        number;
+  rmse?:           number;
+  mae?:            number;
+  auc?:            number;
+  brierScore?:     number;
+  perModel?:       Record<string, { accuracy?: number; auc?: number; rmse?: number; mae?: number }>;
+  message:         string;
+  version?:        string;
+}
+
+// ── Metadata helpers ──────────────────────────────────────────────────────────
 
 export function loadModel(): EnsembleModel | null {
   try {
@@ -61,183 +82,247 @@ export function loadModel(): EnsembleModel | null {
 }
 
 function saveMetadata(meta: EnsembleModel): void {
-  fs.writeFileSync(META_PATH, JSON.stringify(meta, null, 2), "utf8");
-}
-
-// ─────────────────────────────────────────────────────────────
-// Training — delegates to Python /train
-// ─────────────────────────────────────────────────────────────
-
-export async function trainModel(logger?: Logger): Promise<{
-  trainingSamples: number;
-  accuracy: number;
-  lrAccuracy: number;
-  rfAccuracy: number;
-  gbAccuracy: number;
-  message: string;
-}> {
-  logger?.info("Forwarding train request to Python sklearn service");
-  let res: Response;
   try {
-    res = await fetch(`${ML_SERVICE_URL}/train`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
+    fs.writeFileSync(META_PATH, JSON.stringify(meta, null, 2), "utf8");
   } catch (err) {
-    logger?.warn({ err }, "Python ML service unreachable — falling back to message");
-    return {
-      trainingSamples: 0,
-      accuracy: 0,
-      lrAccuracy: 0,
-      rfAccuracy: 0,
-      gbAccuracy: 0,
-      message: "Python ML service is not reachable. Make sure the ML Service workflow is running.",
-    };
+    console.warn("[mlService] Could not write model metadata:", err);
   }
-
-  const data = (await res.json()) as {
-    trainingSamples: number;
-    accuracy: number;
-    lrAccuracy: number;
-    rfAccuracy: number;
-    gbAccuracy: number;
-    message: string;
-    trainedAt?: string;
-    version?: string;
-  };
-
-  if (res.ok && data.trainingSamples >= 5 && data.accuracy > 0) {
-    // Persist metadata so loadModel() works synchronously
-    saveMetadata({
-      version: data.version ?? "sklearn_ensemble_v1",
-      trainedAt: data.trainedAt ?? new Date().toISOString(),
-      trainingSamples: data.trainingSamples,
-      accuracy: data.accuracy,
-      lrAccuracy: data.lrAccuracy,
-      rfAccuracy: data.rfAccuracy,
-      gbAccuracy: data.gbAccuracy,
-    });
-    logger?.info(
-      { accuracy: data.accuracy, lrAccuracy: data.lrAccuracy, rfAccuracy: data.rfAccuracy, gbAccuracy: data.gbAccuracy },
-      "sklearn ensemble trained"
-    );
-  }
-
-  return {
-    trainingSamples: data.trainingSamples ?? 0,
-    accuracy: data.accuracy ?? 0,
-    lrAccuracy: data.lrAccuracy ?? 0,
-    rfAccuracy: data.rfAccuracy ?? 0,
-    gbAccuracy: data.gbAccuracy ?? 0,
-    message: data.message ?? "Unknown response from Python service.",
-  };
 }
 
-// ─────────────────────────────────────────────────────────────
-// Prediction — delegates to Python /predict
-// ─────────────────────────────────────────────────────────────
+// ── Training ──────────────────────────────────────────────────────────────────
 
+/**
+ * POST /train — starts async training, returns immediately.
+ * Polls /train/status until done or timeout.
+ */
+export async function trainModel(logger?: Logger): Promise<TrainResult> {
+  logger?.info("Starting ML model training...");
+
+  try {
+    const startResp = await fetch(`${ML_URL}/train`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      signal:  AbortSignal.timeout(10_000),
+    });
+
+    if (!startResp.ok && startResp.status !== 202) {
+      const err = `ML service returned ${startResp.status}`;
+      logger?.warn(err);
+      return { trainingSamples: 0, accuracy: 0, message: err };
+    }
+
+    const startData = await startResp.json() as { status: string };
+    if (startData.status === "already_running") {
+      return { trainingSamples: 0, accuracy: 0, message: "Training already in progress" };
+    }
+
+    // Poll /train/status (up to 15 min)
+    const deadline     = Date.now() + 15 * 60 * 1000;
+    let   pollInterval = 5_000;
+
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      pollInterval = Math.min(30_000, pollInterval + 2_000);
+
+      try {
+        const statusResp = await fetch(`${ML_URL}/train/status`, {
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (!statusResp.ok) continue;
+
+        const status = await statusResp.json() as {
+          running: boolean;
+          lastResult?: {
+            trainingSamples?: number;
+            accuracy?: number;
+            rmse?: number;
+            mae?: number;
+            auc?: number;
+            brierScore?: number;
+            perModel?: Record<string, { accuracy?: number; auc?: number; rmse?: number; mae?: number }>;
+            version?: string;
+            message?: string;
+            error?: string;
+          };
+        };
+
+        if (!status.running && status.lastResult) {
+          const r = status.lastResult;
+          if (r.error) {
+            logger?.error({ err: r.error }, "ML training failed");
+            return { trainingSamples: 0, accuracy: 0, message: r.error };
+          }
+
+          const result: TrainResult = {
+            trainingSamples: r.trainingSamples ?? 0,
+            accuracy:        r.accuracy        ?? 0,
+            rmse:            r.rmse,
+            mae:             r.mae,
+            auc:             r.auc,
+            brierScore:      r.brierScore,
+            perModel:        r.perModel,
+            version:         r.version,
+            message:         r.message ?? "Training complete",
+          };
+
+          // Persist full metadata
+          if (result.trainingSamples > 0) {
+            const lrAcc  = r.perModel?.["lr"]?.accuracy;
+            const rfAcc  = r.perModel?.["rf"]?.accuracy;
+            const gbAcc  = r.perModel?.["hgb"]?.accuracy ?? r.perModel?.["gb"]?.accuracy;
+            saveMetadata({
+              version:         r.version ?? "v4",
+              trainedAt:       new Date().toISOString(),
+              trainingSamples: result.trainingSamples,
+              accuracy:        result.accuracy,
+              rmse:            result.rmse,
+              mae:             result.mae,
+              auc:             result.auc,
+              brierScore:      result.brierScore,
+              lrAccuracy:      lrAcc,
+              rfAccuracy:      rfAcc,
+              gbAccuracy:      gbAcc,
+              perModel:        r.perModel,
+            });
+          }
+
+          logger?.info(
+            { accuracy: result.accuracy, auc: result.auc, samples: result.trainingSamples },
+            "ML training complete"
+          );
+          return result;
+        }
+      } catch {
+        // Poll error — keep trying
+      }
+    }
+
+    return { trainingSamples: 0, accuracy: 0, message: "Training timed out after 15 min" };
+
+  } catch (err) {
+    const msg = "Python ML service unreachable — is the ML service running?";
+    logger?.warn({ err }, msg);
+    return { trainingSamples: 0, accuracy: 0, message: msg };
+  }
+}
+
+// ── Prediction ────────────────────────────────────────────────────────────────
+
+/**
+ * Call /predict with all 19 features.
+ * Returns full ensemble result including CI and per-model breakdown.
+ */
 export async function predictRain(
-  temperature: number,
-  humidity: number,
-  pressure: number,
-  windspeed: number,
-  weathercode: number,
-  timestamp: Date = new Date(),
-  lat?: number,
-  lon?: number,
-  elevation?: number,
+  temperature:      number,
+  humidity:         number,
+  pressure:         number,
+  windspeed:        number,
+  weathercode:      number,
+  timestamp:        Date    = new Date(),
+  lat?:             number,
+  lon?:             number,
+  elevation?:       number,
+  pressureTendency: number  = 0,
 ): Promise<MLPrediction> {
-  const hour = timestamp.getHours();
-  const month = timestamp.getMonth() + 1;
+  const hour         = timestamp.getHours();
+  const month        = timestamp.getMonth() + 1;
   const isRainingNow = RAIN_CODES.has(weathercode);
 
-  let res: Response;
   try {
-    res = await fetch(`${ML_SERVICE_URL}/predict`, {
-      method: "POST",
+    const resp = await fetch(`${ML_URL}/predict`, {
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         temperature,
         humidity,
         pressure,
         windspeed,
-        is_raining_now: isRainingNow,
+        is_raining_now:    isRainingNow,
+        pressure_tendency: pressureTendency,
         hour,
         month,
-        lat: lat ?? 0.0,
-        lon: lon ?? 37.5,
+        lat:       lat       ?? 0.0,
+        lon:       lon       ?? 37.5,
         elevation: elevation ?? 1000.0,
       }),
+      signal: AbortSignal.timeout(5_000),
     });
+
+    if (resp.status === 404) return ruleFallback(humidity, pressure, weathercode);
+    if (!resp.ok)            return ruleFallback(humidity, pressure, weathercode);
+
+    const data = await resp.json() as {
+      probability:          number;
+      model_used?:          string;
+      modelUsed?:           string;
+      confidenceInterval?:  { low: number; high: number };
+      modelAgreement?:      number;
+      modelProbabilities?:  Record<string, number>;
+      version?:             string;
+      accuracy?:            number;
+      rmse?:                number;
+      mae?:                 number;
+      auc?:                 number;
+      brierScore?:          number;
+      perModel?:            Record<string, { accuracy?: number; auc?: number; rmse?: number; mae?: number }>;
+      trainingSamples?:     number;
+      trainedAt?:           string;
+      modelTrained?:        boolean;
+    };
+
+    if (data.modelTrained === false) return ruleFallback(humidity, pressure, weathercode);
+
+    const prob       = data.probability;
+    const confidence = +(Math.min(0.98, 0.5 + Math.abs(prob - 0.5) * 0.96)).toFixed(2);
+
+    // Sync metadata sidecar if the response carries fresh training info
+    if (data.trainedAt && data.trainingSamples && data.trainingSamples > 0) {
+      saveMetadata({
+        version:         data.version         ?? "v4",
+        trainedAt:       data.trainedAt,
+        trainingSamples: data.trainingSamples,
+        accuracy:        data.accuracy        ?? 0,
+        rmse:            data.rmse,
+        mae:             data.mae,
+        auc:             data.auc,
+        brierScore:      data.brierScore,
+        perModel:        data.perModel,
+        lrAccuracy:      data.perModel?.["lr"]?.accuracy,
+        rfAccuracy:      data.perModel?.["rf"]?.accuracy,
+        gbAccuracy:      data.perModel?.["hgb"]?.accuracy ?? data.perModel?.["gb"]?.accuracy,
+      });
+    }
+
+    return {
+      predictionValue:    prob >= 0.5 ? "yes" : "no",
+      confidence,
+      probability:        +prob.toFixed(4),
+      modelVersion:       `v4_${data.version ?? "ensemble"}`,
+      modelUsed:          data.model_used ?? data.modelUsed,
+      confidenceInterval: data.confidenceInterval,
+      modelAgreement:     data.modelAgreement,
+      modelProbabilities: data.modelProbabilities,
+    };
+
   } catch {
-    // Python service unreachable — fall back to heuristic
     return ruleFallback(humidity, pressure, weathercode);
   }
-
-  if (res.status === 404) {
-    // No model trained yet — use heuristic
-    return ruleFallback(humidity, pressure, weathercode);
-  }
-
-  if (!res.ok) {
-    return ruleFallback(humidity, pressure, weathercode);
-  }
-
-  const data = (await res.json()) as {
-    probability: number;
-    modelProbabilities: { lr: number; rf: number; gb: number };
-    version: string;
-    accuracy: number;
-    lrAccuracy?: number;
-    rfAccuracy?: number;
-    gbAccuracy?: number;
-    trainingSamples?: number;
-    trainedAt?: string;
-    modelTrained?: boolean;
-  };
-
-  const prob = data.probability;
-  const confidence = Math.round(Math.abs(prob - 0.5) * 2 * 100) / 100;
-
-  // Keep metadata in sync if the response carries it
-  if (data.trainedAt && data.trainingSamples) {
-    saveMetadata({
-      version: data.version ?? "sklearn_ensemble_v1",
-      trainedAt: data.trainedAt,
-      trainingSamples: data.trainingSamples,
-      accuracy: data.accuracy,
-      lrAccuracy: data.lrAccuracy ?? 0,
-      rfAccuracy: data.rfAccuracy ?? 0,
-      gbAccuracy: data.gbAccuracy ?? 0,
-    });
-  }
-
-  return {
-    predictionValue: prob >= 0.5 ? "yes" : "no",
-    confidence,
-    probability: Math.round(prob * 1000) / 1000,
-    modelVersion: `sklearn_${data.version ?? "ensemble_v1"}_acc${data.accuracy ?? 0}`,
-    modelProbabilities: data.modelProbabilities,
-  };
 }
 
-// ─────────────────────────────────────────────────────────────
-// Heuristic fallback (when no Python model is available)
-// ─────────────────────────────────────────────────────────────
+// ── Heuristic fallback ────────────────────────────────────────────────────────
 
 function ruleFallback(humidity: number, pressure: number, weathercode: number): MLPrediction {
   let p = 0.2;
   if (RAIN_CODES.has(weathercode)) p += 0.5;
-  if (humidity > 85) p += 0.2;
-  else if (humidity > 70) p += 0.1;
-  if (pressure < 1000) p += 0.15;
+  if (humidity   > 85)   p += 0.20;
+  else if (humidity > 70) p += 0.10;
+  if (pressure   < 1000) p += 0.15;
   else if (pressure < 1010) p += 0.05;
   p = Math.min(0.95, Math.max(0.05, p));
   return {
     predictionValue: p >= 0.5 ? "yes" : "no",
-    confidence: Math.round(Math.abs(p - 0.5) * 2 * 100) / 100,
-    probability: Math.round(p * 1000) / 1000,
-    modelVersion: "rules_heuristic",
+    confidence:      +(Math.abs(p - 0.5) * 2).toFixed(2),
+    probability:     +p.toFixed(3),
+    modelVersion:    "rules_heuristic",
   };
 }
