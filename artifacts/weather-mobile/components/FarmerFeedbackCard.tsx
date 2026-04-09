@@ -5,7 +5,7 @@ import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-nati
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getBaseUrl } from "@/lib/api-client";
+import { customFetch } from "@/lib/api-client/custom-fetch";
 
 export const FEEDBACK_PENDING_KEY = "microclimate_feedback_pending_v1";
 
@@ -24,10 +24,6 @@ interface Props {
 type Answer = "yes" | "almost" | "no";
 type Step = "rain" | "cloudy" | "done";
 
-function getApiBase() {
-  return getBaseUrl() ?? "http://localhost:8080";
-}
-
 export default function FarmerFeedbackCard({ pending, onDismiss }: Props) {
   const colors = useColors();
   const { t } = useLanguage();
@@ -38,7 +34,7 @@ export default function FarmerFeedbackCard({ pending, onDismiss }: Props) {
   const submitFeedback = async (question: string, answer: Answer) => {
     setSubmitting(true);
     try {
-      await fetch(`${getApiBase()}/api/feedback`, {
+      await customFetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -48,6 +44,7 @@ export default function FarmerFeedbackCard({ pending, onDismiss }: Props) {
           answer,
           locationName: pending.locationName,
         }),
+        responseType: "json",
       });
     } catch {}
     setSubmitting(false);

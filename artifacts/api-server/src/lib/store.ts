@@ -1,5 +1,14 @@
 import pg, { type QueryResultRow } from "pg";
 
+export interface FarmerProfile {
+  id: number;
+  phoneNumber: string;
+  displayName: string | null;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface TrackedLocation {
   id: number;
   name: string;
@@ -9,6 +18,7 @@ export interface TrackedLocation {
   cropType: string | null;
   plantingDate: string | null;
   active: boolean;
+  farmerId?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +65,7 @@ export interface FarmerFeedbackRecord {
 type PersistenceMode = "memory" | "postgres";
 
 interface StoreState {
+  farmers: FarmerProfile[];
   locations: TrackedLocation[];
   weatherRecords: StoredWeatherRecord[];
   predictions: StoredPredictionRecord[];
@@ -71,6 +82,7 @@ interface StoreHealth {
 const DATABASE_URL = process.env.DATABASE_URL?.trim() ?? "";
 const STORE_MODE: PersistenceMode = DATABASE_URL ? "postgres" : "memory";
 const state: StoreState = {
+  farmers: [],
   locations: [],
   weatherRecords: [],
   predictions: [],
@@ -78,6 +90,7 @@ const state: StoreState = {
 };
 
 const counters = {
+  farmer: 1,
   location: 1,
   weather: 1,
   prediction: 1,
@@ -155,6 +168,18 @@ function mapLocationRow(row: Record<string, unknown>): TrackedLocation {
     cropType: row.crop_type === null ? null : String(row.crop_type),
     plantingDate: row.planting_date === null ? null : String(row.planting_date),
     active: Boolean(row.active),
+    farmerId: row.farmer_id === null || row.farmer_id === undefined ? null : toNumber(row.farmer_id),
+    createdAt: toDate(row.created_at),
+    updatedAt: row.updated_at ? toDate(row.updated_at) : toDate(row.created_at),
+  };
+}
+
+function mapFarmerRow(row: Record<string, unknown>): FarmerProfile {
+  return {
+    id: toNumber(row.id),
+    phoneNumber: String(row.phone_number),
+    displayName: row.display_name === null ? null : String(row.display_name),
+    lastLoginAt: row.last_login_at ? toDate(row.last_login_at) : null,
     createdAt: toDate(row.created_at),
     updatedAt: row.updated_at ? toDate(row.updated_at) : toDate(row.created_at),
   };
@@ -209,8 +234,20 @@ async function ensureSchema(): Promise<void> {
   const db = getPool();
 
   await db.query(`
+    CREATE TABLE IF NOT EXISTS farmer_profiles (
+      id SERIAL PRIMARY KEY,
+      phone_number TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      last_login_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await db.query(`
     CREATE TABLE IF NOT EXISTS tracked_locations (
       id SERIAL PRIMARY KEY,
+      farmer_id INTEGER REFERENCES farmer_profiles(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       latitude DOUBLE PRECISION NOT NULL,
       longitude DOUBLE PRECISION NOT NULL,
@@ -262,6 +299,7 @@ async function ensureSchema(): Promise<void> {
   await db.query(`
     CREATE TABLE IF NOT EXISTS farmer_feedback (
       id SERIAL PRIMARY KEY,
+      farmer_id INTEGER REFERENCES farmer_profiles(id) ON DELETE SET NULL,
       latitude DOUBLE PRECISION NOT NULL,
       longitude DOUBLE PRECISION NOT NULL,
       question TEXT NOT NULL,
@@ -276,11 +314,21 @@ async function ensureSchema(): Promise<void> {
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
   `);
   await db.query(`
+    ALTER TABLE tracked_locations
+    ADD COLUMN IF NOT EXISTS farmer_id INTEGER REFERENCES farmer_profiles(id) ON DELETE CASCADE;
+  `);
+  await db.query(`
+    ALTER TABLE farmer_feedback
+    ADD COLUMN IF NOT EXISTS farmer_id INTEGER REFERENCES farmer_profiles(id) ON DELETE SET NULL;
+  `);
+  await db.query(`
     ALTER TABLE weather_predictions
     ADD COLUMN IF NOT EXISTS probability REAL NOT NULL DEFAULT 0;
   `);
 
+  await db.query("CREATE INDEX IF NOT EXISTS idx_farmer_profiles_phone_number ON farmer_profiles (phone_number);");
   await db.query("CREATE INDEX IF NOT EXISTS idx_tracked_locations_active ON tracked_locations (active);");
+  await db.query("CREATE INDEX IF NOT EXISTS idx_tracked_locations_farmer_id ON tracked_locations (farmer_id);");
   await db.query("CREATE INDEX IF NOT EXISTS idx_weather_data_created_at ON weather_data (created_at DESC);");
   await db.query("CREATE INDEX IF NOT EXISTS idx_weather_data_coords_created_at ON weather_data (latitude, longitude, created_at DESC);");
   await db.query("CREATE INDEX IF NOT EXISTS idx_weather_predictions_target_time ON weather_predictions (target_time DESC);");
@@ -325,6 +373,75 @@ export function getStoreHealth(): StoreHealth {
   };
 }
 
+export async function upsertFarmerProfile(input: {
+  phoneNumber: string;
+  displayName?: string | null;
+}): Promise<FarmerProfile> {
+  if (STORE_MODE === "memory") {
+    const existing = state.farmers.find((entry) => entry.phoneNumber === input.phoneNumber);
+    if (existing) {
+      existing.displayName = input.displayName ?? existing.displayName;
+      existing.lastLoginAt = new Date();
+      existing.updatedAt = new Date();
+      return { ...existing };
+    }
+
+    const now = new Date();
+    const farmer: FarmerProfile = {
+      id: counters.farmer++,
+      phoneNumber: input.phoneNumber,
+      displayName: input.displayName ?? null,
+      lastLoginAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    state.farmers.push(farmer);
+    return { ...farmer };
+  }
+
+  const result = await getPool().query(
+    `
+      INSERT INTO farmer_profiles (phone_number, display_name, last_login_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (phone_number)
+      DO UPDATE SET
+        display_name = COALESCE(EXCLUDED.display_name, farmer_profiles.display_name),
+        last_login_at = NOW(),
+        updated_at = NOW()
+      RETURNING *;
+    `,
+    [input.phoneNumber, input.displayName ?? null],
+  );
+
+  return mapFarmerRow(result.rows[0] as Record<string, unknown>);
+}
+
+export async function getFarmerProfileById(id: number): Promise<FarmerProfile | null> {
+  if (STORE_MODE === "memory") {
+    const farmer = state.farmers.find((entry) => entry.id === id);
+    return farmer ? { ...farmer } : null;
+  }
+
+  const result = await getPool().query(
+    "SELECT * FROM farmer_profiles WHERE id = $1 LIMIT 1;",
+    [id],
+  );
+  return result.rowCount ? mapFarmerRow(result.rows[0] as Record<string, unknown>) : null;
+}
+
+export async function getFarmerProfileByPhoneNumber(phoneNumber: string): Promise<FarmerProfile | null> {
+  if (STORE_MODE === "memory") {
+    const farmer = state.farmers.find((entry) => entry.phoneNumber === phoneNumber);
+    return farmer ? { ...farmer } : null;
+  }
+
+  const result = await getPool().query(
+    "SELECT * FROM farmer_profiles WHERE phone_number = $1 LIMIT 1;",
+    [phoneNumber],
+  );
+  return result.rowCount ? mapFarmerRow(result.rows[0] as Record<string, unknown>) : null;
+}
+
 export async function addLocationRecord(input: {
   name: string;
   latitude: number;
@@ -333,6 +450,7 @@ export async function addLocationRecord(input: {
   cropType?: string | null;
   plantingDate?: string | null;
   active?: boolean;
+  farmerId?: number | null;
 }): Promise<TrackedLocation> {
   if (STORE_MODE === "memory") {
     const now = new Date();
@@ -345,6 +463,7 @@ export async function addLocationRecord(input: {
       cropType: input.cropType ?? null,
       plantingDate: input.plantingDate ?? null,
       active: input.active ?? true,
+      farmerId: input.farmerId ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -355,12 +474,13 @@ export async function addLocationRecord(input: {
   const result = await getPool().query(
     `
       INSERT INTO tracked_locations
-        (name, latitude, longitude, elevation, crop_type, planting_date, active)
+        (farmer_id, name, latitude, longitude, elevation, crop_type, planting_date, active)
       VALUES
-        ($1, $2, $3, $4, $5, $6, COALESCE($7, TRUE))
+        ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, TRUE))
       RETURNING *;
     `,
     [
+      input.farmerId ?? null,
       input.name,
       input.latitude,
       input.longitude,
@@ -374,35 +494,57 @@ export async function addLocationRecord(input: {
   return mapLocationRow(result.rows[0] as Record<string, unknown>);
 }
 
-export async function listLocations(): Promise<TrackedLocation[]> {
+export async function listLocations(options?: { farmerId?: number | null }): Promise<TrackedLocation[]> {
   if (STORE_MODE === "memory") {
-    return sortNewestFirst(state.locations).map((location) => ({ ...location }));
+    const filtered = options?.farmerId === undefined
+      ? state.locations
+      : state.locations.filter((location) => (location.farmerId ?? null) === options.farmerId);
+    return sortNewestFirst(filtered).map((location) => ({ ...location }));
   }
 
-  const result = await getPool().query(
-    `
+  const params: unknown[] = [];
+  let query = `
       SELECT *
       FROM tracked_locations
-      ORDER BY updated_at DESC, created_at DESC;
-    `,
-  );
+  `;
+  if (options?.farmerId !== undefined) {
+    params.push(options.farmerId);
+    query += ` WHERE farmer_id = $${params.length}`;
+  }
+  query += " ORDER BY updated_at DESC, created_at DESC;";
+
+  const result = await getPool().query(query, params);
 
   return result.rows.map((row: DbRow) => mapLocationRow(row));
 }
 
-export async function listActiveLocations(): Promise<TrackedLocation[]> {
+export async function listActiveLocations(options?: { farmerId?: number | null }): Promise<TrackedLocation[]> {
   if (STORE_MODE === "memory") {
-    return sortNewestFirst(state.locations.filter((location) => location.active)).map((location) => ({ ...location }));
+    const filtered = state.locations.filter((location) => {
+      if (!location.active) {
+        return false;
+      }
+      if (options?.farmerId === undefined) {
+        return true;
+      }
+      return (location.farmerId ?? null) === options.farmerId;
+    });
+    return sortNewestFirst(filtered).map((location) => ({ ...location }));
   }
 
-  const result = await getPool().query(
-    `
+  const params: unknown[] = [];
+  let query = `
       SELECT *
       FROM tracked_locations
       WHERE active = TRUE
-      ORDER BY updated_at DESC, created_at DESC;
-    `,
-  );
+  `;
+  if (options?.farmerId !== undefined) {
+    params.push(options.farmerId);
+    query += ` AND farmer_id = $${params.length}`;
+  }
+  query += " ORDER BY updated_at DESC, created_at DESC;";
+
+  const result = await getPool().query(query, params);
 
   return result.rows.map((row: DbRow) => mapLocationRow(row));
 }
@@ -410,9 +552,18 @@ export async function listActiveLocations(): Promise<TrackedLocation[]> {
 export async function updateLocationRecord(
   id: number,
   patch: Partial<Omit<TrackedLocation, "id" | "createdAt" | "updatedAt">>,
+  options?: { farmerId?: number | null },
 ): Promise<TrackedLocation | null> {
   if (STORE_MODE === "memory") {
-    const location = state.locations.find((entry) => entry.id === id);
+    const location = state.locations.find((entry) => {
+      if (entry.id !== id) {
+        return false;
+      }
+      if (options?.farmerId === undefined) {
+        return true;
+      }
+      return (entry.farmerId ?? null) === options.farmerId;
+    });
     if (!location) {
       return null;
     }
@@ -437,18 +588,30 @@ export async function updateLocationRecord(
   if (patch.longitude !== undefined) addField("longitude", patch.longitude);
 
   if (fields.length === 0) {
-    const existing = await getPool().query("SELECT * FROM tracked_locations WHERE id = $1 LIMIT 1;", [id]);
+    const params: unknown[] = [id];
+    let query = "SELECT * FROM tracked_locations WHERE id = $1";
+    if (options?.farmerId !== undefined) {
+      params.push(options.farmerId);
+      query += ` AND farmer_id = $${params.length}`;
+    }
+    query += " LIMIT 1;";
+    const existing = await getPool().query(query, params);
     return existing.rowCount ? mapLocationRow(existing.rows[0] as Record<string, unknown>) : null;
   }
 
   fields.push("updated_at = NOW()");
   values.push(id);
+  let whereClause = `id = $${values.length}`;
+  if (options?.farmerId !== undefined) {
+    values.push(options.farmerId);
+    whereClause += ` AND farmer_id = $${values.length}`;
+  }
 
   const result = await getPool().query(
     `
       UPDATE tracked_locations
       SET ${fields.join(", ")}
-      WHERE id = $${values.length}
+      WHERE ${whereClause}
       RETURNING *;
     `,
     values,
@@ -457,9 +620,17 @@ export async function updateLocationRecord(
   return result.rowCount ? mapLocationRow(result.rows[0] as Record<string, unknown>) : null;
 }
 
-export async function deleteLocationRecord(id: number): Promise<TrackedLocation | null> {
+export async function deleteLocationRecord(id: number, options?: { farmerId?: number | null }): Promise<TrackedLocation | null> {
   if (STORE_MODE === "memory") {
-    const index = state.locations.findIndex((entry) => entry.id === id);
+    const index = state.locations.findIndex((entry) => {
+      if (entry.id !== id) {
+        return false;
+      }
+      if (options?.farmerId === undefined) {
+        return true;
+      }
+      return (entry.farmerId ?? null) === options.farmerId;
+    });
     if (index === -1) {
       return null;
     }
@@ -467,10 +638,15 @@ export async function deleteLocationRecord(id: number): Promise<TrackedLocation 
     return deleted ? { ...deleted } : null;
   }
 
-  const result = await getPool().query(
-    "DELETE FROM tracked_locations WHERE id = $1 RETURNING *;",
-    [id],
-  );
+  const params: unknown[] = [id];
+  let query = "DELETE FROM tracked_locations WHERE id = $1";
+  if (options?.farmerId !== undefined) {
+    params.push(options.farmerId);
+    query += ` AND farmer_id = $${params.length}`;
+  }
+  query += " RETURNING *;";
+
+  const result = await getPool().query(query, params);
 
   return result.rowCount ? mapLocationRow(result.rows[0] as Record<string, unknown>) : null;
 }
@@ -626,7 +802,7 @@ export async function listPredictionRecords(): Promise<StoredPredictionRecord[]>
 }
 
 export async function addFeedbackRecord(
-  input: Omit<FarmerFeedbackRecord, "id" | "createdAt">,
+  input: Omit<FarmerFeedbackRecord, "id" | "createdAt"> & { farmerId?: number | null },
 ): Promise<FarmerFeedbackRecord> {
   if (STORE_MODE === "memory") {
     const record: FarmerFeedbackRecord = {
@@ -641,12 +817,13 @@ export async function addFeedbackRecord(
   const result = await getPool().query(
     `
       INSERT INTO farmer_feedback
-        (latitude, longitude, question, answer, location_name)
+        (farmer_id, latitude, longitude, question, answer, location_name)
       VALUES
-        ($1, $2, $3, $4, $5)
+        ($1, $2, $3, $4, $5, $6)
       RETURNING *;
     `,
     [
+      input.farmerId ?? null,
       input.latitude,
       input.longitude,
       input.question,

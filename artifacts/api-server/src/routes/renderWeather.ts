@@ -1,7 +1,8 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 import { generateAlerts } from "../lib/alertsService.js";
 import { requireAdminAuth } from "../lib/adminAuth.js";
+import { requireFarmerOrAdminAuth, type AuthenticatedActor } from "../lib/farmerAuth.js";
 import { fetchForecast } from "../lib/forecastService.js";
 import {
   loadModel,
@@ -25,6 +26,8 @@ const router: IRouter = Router();
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5001";
 const ML_MODE = process.env.ML_SERVICE_URL ? "remote-python" : "fallback";
 const RAIN_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
+
+router.use(requireFarmerOrAdminAuth);
 
 const weatherQuerySchema = z.object({
   lat: z.coerce.number(),
@@ -114,6 +117,12 @@ function buildPredictionReasoning(
   }
 
   return notes.join(" ");
+}
+
+type AuthenticatedRequest = Request & { authenticatedActor?: AuthenticatedActor };
+
+function getAuthenticatedActorFromRequest(req: AuthenticatedRequest): AuthenticatedActor {
+  return req.authenticatedActor as AuthenticatedActor;
 }
 
 function buildFarmingAdvice(
@@ -452,7 +461,9 @@ router.post("/feedback", async (req, res): Promise<void> => {
   }
 
   try {
+    const actor = getAuthenticatedActorFromRequest(req);
     await addFeedbackRecord({
+      farmerId: actor.role === "farmer" ? actor.farmerSession.id : null,
       latitude: parsed.data.lat,
       longitude: parsed.data.lon,
       question: parsed.data.question,

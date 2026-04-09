@@ -13,7 +13,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
-import { getBaseUrl } from "@/lib/api-client";
+import { customFetch } from "@/lib/api-client/custom-fetch";
 
 interface CommunityData {
   farmerCount: number;
@@ -38,11 +38,9 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
     let cancelled = false;
     setLoading(true);
 
-    const base = getBaseUrl() ?? "";
-    const url = `${base}/api/weather/community?lat=${lat}&lon=${lon}`;
-
-    fetch(url)
-      .then((r) => r.json())
+    customFetch<CommunityData>(`/api/weather/community?lat=${lat}&lon=${lon}`, {
+      responseType: "json",
+    })
       .then((d: CommunityData) => {
         if (!cancelled) {
           setData(d);

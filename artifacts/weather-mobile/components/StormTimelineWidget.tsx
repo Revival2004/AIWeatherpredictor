@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getBaseUrl } from "@/lib/api-client";
+import { customFetch } from "@/lib/api-client/custom-fetch";
 
 interface Slot {
   time: string;
@@ -16,10 +16,6 @@ interface StormTimeline {
   stormArrivalMinutes: number | null;
   stormDetected: boolean;
   stormSoon: boolean;
-}
-
-function getApiBase() {
-  return getBaseUrl() ?? "http://localhost:8080";
 }
 
 function formatArrival(minutes: number): string {
@@ -38,8 +34,9 @@ export default function StormTimelineWidget({ lat, lon }: { lat: number; lon: nu
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${getApiBase()}/api/weather/storm-timeline?lat=${lat}&lon=${lon}`)
-      .then((r) => r.json())
+    customFetch<StormTimeline>(`/api/weather/storm-timeline?lat=${lat}&lon=${lon}`, {
+      responseType: "json",
+    })
       .then((d) => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, [lat, lon]);

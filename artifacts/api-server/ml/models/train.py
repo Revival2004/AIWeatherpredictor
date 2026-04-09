@@ -64,14 +64,14 @@ def _build_candidates() -> dict[str, list[Any]]:
                 max_depth=10,
                 min_samples_leaf=3,
                 random_state=42,
-                n_jobs=-1,
+                n_jobs=1,
             ),
             RandomForestRegressor(
                 n_estimators=300,
                 max_depth=14,
                 min_samples_leaf=2,
                 random_state=42,
-                n_jobs=-1,
+                n_jobs=1,
             ),
         ],
     }
@@ -87,7 +87,7 @@ def _build_candidates() -> dict[str, list[Any]]:
                 reg_lambda=1.0,
                 objective="reg:squarederror",
                 random_state=42,
-                n_jobs=-1,
+                n_jobs=1,
                 verbosity=0,
             ),
             XGBRegressor(
@@ -100,7 +100,7 @@ def _build_candidates() -> dict[str, list[Any]]:
                 reg_lambda=1.0,
                 objective="reg:squarederror",
                 random_state=42,
-                n_jobs=-1,
+                n_jobs=1,
                 verbosity=0,
             ),
         ]

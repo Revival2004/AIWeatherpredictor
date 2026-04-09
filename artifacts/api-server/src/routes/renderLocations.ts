@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 import {
   activateLocation,
@@ -8,10 +8,13 @@ import {
   getLocations,
   updateLocation,
 } from "../lib/locationService.js";
+import { requireFarmerOrAdminAuth, type AuthenticatedActor } from "../lib/farmerAuth.js";
 
 const router: IRouter = Router();
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5001";
 const ML_MODE = process.env.ML_SERVICE_URL ? "remote-python" : "fallback";
+
+router.use(requireFarmerOrAdminAuth);
 
 const addLocationBodySchema = z.object({
   name: z.string().min(1).max(100),
@@ -48,8 +51,19 @@ function triggerLocationBootstrap(lat: number, lon: number, name: string): void 
   }).catch(() => {});
 }
 
-router.get("/locations", async (_req, res): Promise<void> => {
-  const locations = await getLocations();
+type AuthenticatedRequest = Request & { authenticatedActor?: AuthenticatedActor };
+
+function getAuthenticatedActorFromRequest(req: AuthenticatedRequest): AuthenticatedActor {
+  return req.authenticatedActor as AuthenticatedActor;
+}
+
+function getScopedFarmerId(req: AuthenticatedRequest): number | undefined {
+  const actor = getAuthenticatedActorFromRequest(req);
+  return actor.role === "farmer" ? actor.farmerSession.id : undefined;
+}
+
+router.get("/locations", async (req, res): Promise<void> => {
+  const locations = await getLocations(getScopedFarmerId(req));
   res.json({ locations });
 });
 
@@ -62,7 +76,14 @@ router.post("/locations", async (req, res): Promise<void> => {
 
   const { name, latitude, longitude } = parsed.data;
   const elevation = await fetchElevation(latitude, longitude);
-  const location = await addLocation(name, latitude, longitude, { elevation });
+  const actor = getAuthenticatedActorFromRequest(req);
+  const location = await addLocation(
+    name,
+    latitude,
+    longitude,
+    actor.role === "farmer" ? actor.farmerSession.id : null,
+    { elevation },
+  );
   triggerLocationBootstrap(latitude, longitude, name);
 
   res.status(201).json({
@@ -86,7 +107,7 @@ router.put("/locations/:id/crop", async (req, res): Promise<void> => {
     return;
   }
 
-  const location = await updateLocation(id, {
+  const location = await updateLocation(id, getScopedFarmerId(req), {
     cropType: parsed.data.cropType ?? null,
     plantingDate: parsed.data.plantingDate ?? null,
   });
@@ -106,7 +127,7 @@ router.put("/locations/:id/deactivate", async (req, res): Promise<void> => {
     return;
   }
 
-  const location = await deactivateLocation(id);
+  const location = await deactivateLocation(id, getScopedFarmerId(req));
   if (!location) {
     res.status(404).json({ error: "Location not found" });
     return;
@@ -122,7 +143,7 @@ router.put("/locations/:id/activate", async (req, res): Promise<void> => {
     return;
   }
 
-  const location = await activateLocation(id);
+  const location = await activateLocation(id, getScopedFarmerId(req));
   if (!location) {
     res.status(404).json({ error: "Location not found" });
     return;
@@ -138,7 +159,7 @@ router.delete("/locations/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const location = await deleteLocation(id);
+  const location = await deleteLocation(id, getScopedFarmerId(req));
   if (!location) {
     res.status(404).json({ error: "Location not found" });
     return;

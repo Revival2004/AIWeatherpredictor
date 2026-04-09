@@ -19,9 +19,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import { StatsPanel } from "@/components/StatsPanel";
+import { useFarmerSession } from "@/contexts/FarmerSessionContext";
 import { useColors } from "@/hooks/useColors";
 import {
-  getBaseUrl,
   getGetLocationsQueryKey,
   getGetWeatherStatsQueryKey,
   type TrackedLocation,
@@ -32,15 +32,13 @@ import {
   useGetLocations,
   useGetWeatherStats,
 } from "@/lib/api-client";
-
-function getApiBase() {
-  return getBaseUrl() ?? "http://localhost:8080";
-}
+import { customFetch } from "@/lib/api-client/custom-fetch";
 
 export default function StatsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { farmer, logout } = useFarmerSession();
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
@@ -145,13 +143,14 @@ export default function StatsScreen() {
     setSavingCrop(true);
 
     try {
-      await fetch(`${getApiBase()}/api/locations/${id}/crop`, {
+      await customFetch(`/api/locations/${id}/crop`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cropType: cropTypeInput || undefined,
           plantingDate: plantingDateInput || undefined,
         }),
+        responseType: "json",
       });
       queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
       setEditingCropId(null);
@@ -179,6 +178,21 @@ export default function StatsScreen() {
   function refetchAll() {
     refetchStats();
     refetchLocations();
+  }
+
+  function confirmLogout() {
+    Alert.alert("Sign out", "Sign out of FarmPal on this phone?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        style: "destructive",
+        onPress: () => {
+          logout().catch(() => {
+            Alert.alert("Sign-out failed", "We could not sign you out cleanly. Please try again.");
+          });
+        },
+      },
+    ]);
   }
 
   const isRefetching = statsRefetching || locationsLoading;
@@ -279,6 +293,25 @@ export default function StatsScreen() {
     insightMeta: { flex: 1, gap: 4 },
     insightTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground },
     insightSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
+    accountRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+    accountIcon: {
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: `${colors.primary}15`,
+    },
+    accountMeta: { flex: 1, gap: 4 },
+    accountTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: colors.foreground },
+    accountSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
+    accountAction: {
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: `${colors.primary}12`,
+    },
+    accountActionText: { fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary },
     locationItem: {
       flexDirection: "row",
       alignItems: "center",
@@ -418,6 +451,22 @@ export default function StatsScreen() {
           <View style={styles.rowLast}>
             <Text style={styles.label}>Prediction note types tracked</Text>
             <Text style={styles.value}>{predEntries.length}</Text>
+          </View>
+        </View>
+
+        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>YOUR ACCOUNT</Text>
+        <View style={styles.card}>
+          <View style={styles.accountRow}>
+            <View style={styles.accountIcon}>
+              <Feather name="user" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.accountMeta}>
+              <Text style={styles.accountTitle}>{farmer?.displayName?.trim() || "Farm owner"}</Text>
+              <Text style={styles.accountSub}>{farmer?.phoneNumber ?? "Phone number unavailable"}</Text>
+            </View>
+            <TouchableOpacity style={styles.accountAction} onPress={confirmLogout}>
+              <Text style={styles.accountActionText}>Sign out</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

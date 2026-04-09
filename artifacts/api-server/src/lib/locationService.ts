@@ -14,6 +14,7 @@ export async function addLocation(
   name: string,
   latitude: number,
   longitude: number,
+  farmerId: number | null,
   options?: {
     elevation?: number | null;
     cropType?: string | null;
@@ -24,6 +25,7 @@ export async function addLocation(
     name,
     latitude,
     longitude,
+    farmerId,
     elevation: options?.elevation ?? null,
     cropType: options?.cropType ?? null,
     plantingDate: options?.plantingDate ?? null,
@@ -31,16 +33,17 @@ export async function addLocation(
   });
 }
 
-export async function getLocations() {
-  return await listLocations();
+export async function getLocations(farmerId?: number | null) {
+  return await listLocations({ farmerId });
 }
 
-export async function getActiveLocations() {
-  return await listActiveLocations();
+export async function getActiveLocations(farmerId?: number | null) {
+  return await listActiveLocations({ farmerId });
 }
 
 export async function updateLocation(
   id: number,
+  farmerId: number | null | undefined,
   patch: {
     elevation?: number | null;
     cropType?: string | null;
@@ -48,17 +51,17 @@ export async function updateLocation(
     active?: boolean;
   },
 ) {
-  return await updateLocationRecord(id, patch);
+  return await updateLocationRecord(id, patch, { farmerId });
 }
 
-export async function deactivateLocation(id: number) {
-  return await updateLocationRecord(id, { active: false });
+export async function deactivateLocation(id: number, farmerId?: number | null) {
+  return await updateLocationRecord(id, { active: false }, { farmerId });
 }
 
-export async function activateLocation(id: number) {
-  return await updateLocationRecord(id, { active: true });
+export async function activateLocation(id: number, farmerId?: number | null) {
+  return await updateLocationRecord(id, { active: true }, { farmerId });
 }
 
-export async function deleteLocation(id: number) {
-  return await deleteLocationRecord(id);
+export async function deleteLocation(id: number, farmerId?: number | null) {
+  return await deleteLocationRecord(id, { farmerId });
 }

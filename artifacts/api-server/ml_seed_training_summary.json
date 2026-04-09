@@ -1,0 +1,61 @@
+{
+  "version": "v5_regression_pipeline",
+  "trainingSamples": 131500,
+  "accuracy": 83.68,
+  "rmse": 0.336777,
+  "mae": 0.228957,
+  "perModel": {
+    "linear_regression": {
+      "rmse": 0.346242,
+      "mae": 0.241549,
+      "accuracy": 0.830418,
+      "cv_rmse": 0.53076,
+      "cv_mae": 0.419298
+    },
+    "random_forest": {
+      "rmse": 0.338214,
+      "mae": 0.225808,
+      "accuracy": 0.835703,
+      "cv_rmse": 0.344686,
+      "cv_mae": 0.241069
+    },
+    "xgboost": {
+      "rmse": 0.337501,
+      "mae": 0.223943,
+      "accuracy": 0.835361,
+      "cv_rmse": 0.343782,
+      "cv_mae": 0.233332
+    },
+    "weighted_ensemble": {
+      "rmse": 0.336777,
+      "mae": 0.228957,
+      "accuracy": 0.836768,
+      "cv_rmse": 0.389909,
+      "cv_mae": 0.281788
+    }
+  },
+  "selectedModel": "weighted_ensemble",
+  "selectedModelDisplay": "WeightedEnsemble",
+  "message": "Trained v5_regression_pipeline on 131,500 samples. Selected WeightedEnsemble with RMSE 0.3368 and MAE 0.2290.",
+  "source": "open-meteo-seed",
+  "monthsBack": 18,
+  "locations": [
+    "Nakuru",
+    "Eldoret",
+    "Nairobi",
+    "Meru",
+    "Machakos",
+    "Kisumu",
+    "Kakamega",
+    "Mombasa",
+    "Garissa",
+    "Marsabit"
+  ],
+  "dateRange": {
+    "start": "2024-10-09",
+    "end": "2026-04-09"
+  },
+  "savedModelPath": "C:\\Users\\Pytho\\OneDrive\\Documents\\New project\\temp\\AIWeatherpredictor-live-ml\\artifacts\\api-server\\ml_model_sklearn.pkl",
+  "savedMetaPath": "C:\\Users\\Pytho\\OneDrive\\Documents\\New project\\temp\\AIWeatherpredictor-live-ml\\artifacts\\api-server\\ml_model_meta.json",
+  "generatedAt": "2026-04-09T11:50:01.706953+00:00"
+}
