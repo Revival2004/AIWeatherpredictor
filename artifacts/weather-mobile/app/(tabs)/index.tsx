@@ -195,8 +195,30 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
 
 const CACHE_KEY_PREFIX = "weather_cache_v1_";
 const LAST_LOC_KEY = "microclimate_last_location_v1";
-const KENYA_DEFAULT_COORDS: Coords = { latitude: -0.3031, longitude: 36.08 };
-const KENYA_DEFAULT_LABEL = "Nakuru (default)";
+const LEGACY_DEFAULT_COORDS = { latitude: -0.3031, longitude: 36.08 };
+
+function isLegacyStoredDefault(saved: unknown): boolean {
+  if (!saved || typeof saved !== "object") return false;
+
+  const candidate = saved as {
+    userSelected?: boolean;
+    coords?: { latitude?: number; longitude?: number };
+  };
+
+  if (candidate.userSelected !== undefined) return false;
+
+  const latitude = candidate.coords?.latitude;
+  const longitude = candidate.coords?.longitude;
+
+  if (typeof latitude !== "number" || typeof longitude !== "number") {
+    return false;
+  }
+
+  return (
+    Math.abs(latitude - LEGACY_DEFAULT_COORDS.latitude) < 0.001 &&
+    Math.abs(longitude - LEGACY_DEFAULT_COORDS.longitude) < 0.001
+  );
+}
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -209,7 +231,6 @@ export default function DashboardScreen() {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
-  const [usingDefault, setUsingDefault] = useState(false);
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [locationUpdated, setLocationUpdated] = useState(false);
@@ -234,12 +255,11 @@ export default function DashboardScreen() {
   useEffect(() => {
     let savedCoords: Coords | null = null;
 
-    const applyDefault = () => {
-      setCoords(KENYA_DEFAULT_COORDS);
-      setLocationLabel(KENYA_DEFAULT_LABEL);
-      setUsingDefault(true);
-      setFetchEnabled(true);
+    const showLocationRequired = (message: string) => {
+      setCoords(null);
+      setFetchEnabled(false);
       setGeoLoading(false);
+      setLocError(message);
     };
 
     const applyGps = (c: Coords, silent = false) => {
@@ -252,10 +272,13 @@ export default function DashboardScreen() {
       }
       setCoords(c);
       setLocationLabel(null);
-      setUsingDefault(false);
       setFetchEnabled(true);
       setGeoLoading(false);
-      AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
+      setLocError(null);
+      AsyncStorage.setItem(
+        LAST_LOC_KEY,
+        JSON.stringify({ coords: c, label: null, userSelected: false, source: "device" })
+      ).catch(() => {});
     };
 
     const tryGps = (silent: boolean) => {
@@ -263,20 +286,35 @@ export default function DashboardScreen() {
         if (typeof navigator !== "undefined" && navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (pos) => applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, silent),
-            () => { if (!silent) applyDefault(); },
+            () => {
+              if (!silent) {
+                showLocationRequired("Enable location or tap the pin button to choose your farm.");
+              }
+            },
             { timeout: 8000 }
           );
         } else {
-          if (!silent) applyDefault();
+          if (!silent) {
+            showLocationRequired("Location is unavailable in this browser. Tap the pin button to choose your farm.");
+          }
         }
       } else {
         Location.requestForegroundPermissionsAsync().then(({ status }) => {
-          if (status !== "granted") { if (!silent) applyDefault(); return null; }
+          if (status !== "granted") {
+            if (!silent) {
+              showLocationRequired("Location permission denied. Allow location or use the pin button to choose your farm.");
+            }
+            return null;
+          }
           return Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         }).then((pos) => {
           if (!pos) return;
           applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, silent);
-        }).catch(() => { if (!silent) applyDefault(); });
+        }).catch(() => {
+          if (!silent) {
+            showLocationRequired("Could not get your current location. Try again or use the pin button to choose your farm.");
+          }
+        });
       }
     };
 
@@ -284,24 +322,26 @@ export default function DashboardScreen() {
       if (raw) {
         try {
           const saved = JSON.parse(raw);
-          const isOldDefault = saved.label === "Nakuru, Kenya" || saved.label === KENYA_DEFAULT_LABEL;
-          if (!isOldDefault && saved.coords) {
+          if (!isLegacyStoredDefault(saved) && saved.coords) {
             // Step 1: Show saved location immediately (fast)
             savedCoords = saved.coords;
             setCoords(saved.coords);
             setLocationLabel(saved.label ?? null);
-            setUsingDefault(false);
             setFetchEnabled(true);
+            setLocError(null);
             // Step 2: Silently re-check GPS in background — auto-update if moved >5 km
             tryGps(true);
             return;
           }
         } catch {}
       }
-      // No saved location — try GPS with loading indicator, fall back to Nakuru
+      // No saved location — request device location with a visible loading state
       setGeoLoading(true);
       tryGps(false);
-    }).catch(() => applyDefault());
+    }).catch(() => {
+      setGeoLoading(true);
+      tryGps(false);
+    });
   }, []);
 
   const baro = useBarometer();
@@ -354,6 +394,7 @@ export default function DashboardScreen() {
     { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
     {
       query: {
+        queryKey: ["planting-advisory", coords?.latitude ?? 0, coords?.longitude ?? 0],
         enabled: fetchEnabled && coords !== null,
       },
     }
@@ -374,8 +415,10 @@ export default function DashboardScreen() {
               setFetchEnabled(true);
               setGeoLoading(false);
               setLocationLabel(null);
-              setUsingDefault(false);
-              AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
+              AsyncStorage.setItem(
+                LAST_LOC_KEY,
+                JSON.stringify({ coords: c, label: null, userSelected: false, source: "device" })
+              ).catch(() => {});
             },
             () => {
               setLocError("Location unavailable");
@@ -400,8 +443,10 @@ export default function DashboardScreen() {
         setFetchEnabled(true);
         setGeoLoading(false);
         setLocationLabel(null);
-        setUsingDefault(false);
-        AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: null })).catch(() => {});
+        AsyncStorage.setItem(
+          LAST_LOC_KEY,
+          JSON.stringify({ coords: c, label: null, userSelected: false, source: "device" })
+        ).catch(() => {});
       }
     } catch {
       setLocError("Could not get location");
@@ -603,20 +648,6 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* Default-location banner — shown when GPS failed and Nakuru is the fallback */}
-      {usingDefault && !isOffline && (
-        <Pressable
-          onPress={handleLocate}
-          style={{ backgroundColor: "#8B5A2B22", paddingVertical: 7, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#8B5A2B33" }}
-        >
-          <Feather name="alert-circle" size={13} color="#8B5A2B" />
-          <Text style={{ color: "#8B5A2B", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
-            {geoLoading ? "Detecting your location…" : "Using Nakuru as default — tap here or the pin button to use your location"}
-          </Text>
-          {!geoLoading && <Feather name="map-pin" size={13} color="#8B5A2B" />}
-        </Pressable>
-      )}
-
       {/* Location auto-updated banner */}
       {locationUpdated && (
         <View style={{ backgroundColor: "#3D8B37", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -675,7 +706,10 @@ export default function DashboardScreen() {
           setLocError(null);
           setLocationLabel(loc.displayName);
           setShowLocationPicker(false);
-          AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: loc.displayName })).catch(() => {});
+          AsyncStorage.setItem(
+            LAST_LOC_KEY,
+            JSON.stringify({ coords: c, label: loc.displayName, userSelected: true, source: "picker" })
+          ).catch(() => {});
         }}
       />
 
@@ -689,7 +723,10 @@ export default function DashboardScreen() {
           setFetchEnabled(true);
           setLocError(null);
           setLocationLabel(loc.name);
-          AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify({ coords: c, label: loc.name })).catch(() => {});
+          AsyncStorage.setItem(
+            LAST_LOC_KEY,
+            JSON.stringify({ coords: c, label: loc.name, userSelected: true, source: "map" })
+          ).catch(() => {});
         }}
       />
 

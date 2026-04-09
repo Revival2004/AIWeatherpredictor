@@ -9,7 +9,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useQuery } from "@tanstack/react-query";
-import { _baseUrl } from "@/lib/api-client/custom-fetch";
+import { getBaseUrl } from "@/lib/api-client/custom-fetch";
 
 interface TimelineSlot {
   time: string;
@@ -44,12 +44,13 @@ function slotBg(probability: number, dark: boolean): string {
 export default function TodayTimeline({ lat, lon }: Props) {
   const colors = useColors();
   const isDark = colors.background === "#1C1917";
+  const baseUrl = getBaseUrl() ?? "https://farmpal-api.onrender.com";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["today-timeline", lat, lon],
     queryFn: async () => {
       const res = await fetch(
-        `${_baseUrl}/api/weather/today-timeline?lat=${lat}&lon=${lon}`
+        `${baseUrl}/api/weather/today-timeline?lat=${lat}&lon=${lon}`
       );
       if (!res.ok) throw new Error("Timeline fetch failed");
       return res.json() as Promise<{ slots: TimelineSlot[] }>;

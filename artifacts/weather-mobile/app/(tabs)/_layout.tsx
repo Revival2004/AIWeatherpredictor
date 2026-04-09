@@ -102,7 +102,7 @@ export default function TabLayout() {
         options={{
           title: "Dashboard",
           tabBarActiveTintColor: TAB_COLORS.dashboard,
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="cloud" focused={focused} accentColor={TAB_COLORS.dashboard} />
           ),
         }}
@@ -112,7 +112,7 @@ export default function TabLayout() {
         options={{
           title: "Forecast",
           tabBarActiveTintColor: TAB_COLORS.forecast,
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="calendar" focused={focused} accentColor={TAB_COLORS.forecast} />
           ),
         }}
@@ -122,7 +122,7 @@ export default function TabLayout() {
         options={{
           title: "History",
           tabBarActiveTintColor: TAB_COLORS.history,
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="clock" focused={focused} accentColor={TAB_COLORS.history} />
           ),
         }}
@@ -132,7 +132,7 @@ export default function TabLayout() {
         options={{
           title: "Analytics",
           tabBarActiveTintColor: TAB_COLORS.analytics,
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="bar-chart-2" focused={focused} accentColor={TAB_COLORS.analytics} />
           ),
         }}

@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
@@ -31,6 +32,30 @@ import StormTimelineWidget from "@/components/StormTimelineWidget";
 
 const CROP_KEY = "selectedCrop";
 const LAST_LOC_KEY = "microclimate_last_location_v1"; // same key as dashboard
+const LEGACY_DEFAULT_COORDS = { latitude: -0.3031, longitude: 36.08 };
+
+function isLegacyStoredDefault(saved: unknown): boolean {
+  if (!saved || typeof saved !== "object") return false;
+
+  const candidate = saved as {
+    userSelected?: boolean;
+    coords?: { latitude?: number; longitude?: number };
+  };
+
+  if (candidate.userSelected !== undefined) return false;
+
+  const latitude = candidate.coords?.latitude;
+  const longitude = candidate.coords?.longitude;
+
+  if (typeof latitude !== "number" || typeof longitude !== "number") {
+    return false;
+  }
+
+  return (
+    Math.abs(latitude - LEGACY_DEFAULT_COORDS.latitude) < 0.001 &&
+    Math.abs(longitude - LEGACY_DEFAULT_COORDS.longitude) < 0.001
+  );
+}
 
 export default function ForecastScreen() {
   const colorScheme = useColorScheme();
@@ -54,22 +79,58 @@ export default function ForecastScreen() {
     requestLocation();
   }, []);
 
-  const KENYA_DEFAULT = { lat: -0.3031, lon: 36.08 };
-
   const requestLocation = useCallback(async () => {
+    setLocError(null);
+
     // Use whatever the dashboard saved — exact same location the user set
     try {
       const raw = await AsyncStorage.getItem(LAST_LOC_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
         // Format: { coords: { latitude, longitude }, label }
-        if (saved?.coords?.latitude != null) {
+        if (!isLegacyStoredDefault(saved) && saved?.coords?.latitude != null) {
           setCoords({ lat: saved.coords.latitude, lon: saved.coords.longitude });
           return;
         }
       }
     } catch {}
-    setCoords(KENYA_DEFAULT);
+
+    try {
+      if (Platform.OS === "web") {
+        if (typeof navigator === "undefined" || !navigator.geolocation) {
+          setCoords(null);
+          setLocError("Location unavailable. Open Home and tap the pin button to choose your farm.");
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+            setLocError(null);
+          },
+          () => {
+            setCoords(null);
+            setLocError("Enable location or open Home and tap the pin button to choose your farm.");
+          },
+          { timeout: 8000 },
+        );
+        return;
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setCoords(null);
+        setLocError("Location permission denied. Open Home and tap the pin button to choose your farm.");
+        return;
+      }
+
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+      setLocError(null);
+    } catch {
+      setCoords(null);
+      setLocError("Could not get your current location. Open Home and choose your farm.");
+    }
   }, []);
 
   const forecastParams = coords ? { lat: coords.lat, lon: coords.lon } : undefined;
@@ -137,7 +198,13 @@ export default function ForecastScreen() {
         {/* Crop selector */}
         <CropSelector selectedCrop={selectedCrop} onSelect={handleCropChange} />
 
-        {isLoading ? (
+        {!coords && locError ? (
+          <View style={styles.errorBox}>
+            <Feather name="map-pin" size={36} color="#F59E0B" />
+            <Text style={[styles.errorText, { color: colors.text }]}>Location needed</Text>
+            <Text style={[styles.errorSub, { color: colors.mutedForeground }]}>{locError}</Text>
+          </View>
+        ) : isLoading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={colorTokens.light.primary} />
             <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Loading forecast…</Text>

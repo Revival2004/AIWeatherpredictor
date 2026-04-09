@@ -15,7 +15,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 // Module-level configuration
 // ---------------------------------------------------------------------------
 
-let _baseUrl: string | null = "https://FarmPal.replit.app";
+let _baseUrl: string | null = "https://farmpal-api.onrender.com";
 let _authTokenGetter: AuthTokenGetter | null = null;
 
 /**
@@ -27,6 +27,10 @@ let _authTokenGetter: AuthTokenGetter | null = null;
  */
 export function setBaseUrl(url: string | null): void {
   _baseUrl = url ? url.replace(/\/+$/, "") : null;
+}
+
+export function getBaseUrl(): string | null {
+  return _baseUrl;
 }
 
 /**

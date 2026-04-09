@@ -21,11 +21,11 @@ import { scheduleDailyFarmingReminder } from "@/services/NotificationService";
 
 // EXPO_PUBLIC_DOMAIN is set in eas.json for production builds.
 // It can be a full URL (https://farmpal-api.onrender.com) or just a domain.
-// Falls back to the Replit preview URL for development.
+// Falls back to the Render API domain for local builds when no env is provided.
 const _apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
 const _baseUrl = _apiDomain
   ? (_apiDomain.startsWith("http") ? _apiDomain : `https://${_apiDomain}`)
-  : "https://FarmPal.replit.app";
+  : "https://farmpal-api.onrender.com";
 setBaseUrl(_baseUrl);
 
 SplashScreen.preventAutoHideAsync();

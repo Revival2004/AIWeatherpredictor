@@ -44,9 +44,10 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
-# Replit
+# Local caches
 .cache/
 .local/
+_tmp_*
 
 # Local agent and prompt assets
 .agents/
