@@ -41,14 +41,14 @@ interface OpenMeteoForecastResponse {
     temperature_2m_min: number[];
     precipitation_sum: number[];
     precipitation_probability_max: number[];
-    windspeed_10m_max: number[];
+    wind_speed_10m_max: number[];
     uv_index_max: number[];
     weathercode: number[];
     et0_fao_evapotranspiration: number[];
   };
   hourly: {
     time: string[];
-    relativehumidity_2m: number[];
+    relative_humidity_2m: number[];
   };
 }
 
@@ -207,13 +207,13 @@ export async function fetchForecast(lat: number, lon: number): Promise<ForecastR
       "temperature_2m_min",
       "precipitation_sum",
       "precipitation_probability_max",
-      "windspeed_10m_max",
+      "wind_speed_10m_max",
       "uv_index_max",
       "weathercode",
       "et0_fao_evapotranspiration",
     ].join(",")
   );
-  url.searchParams.set("hourly", "relativehumidity_2m");
+  url.searchParams.set("hourly", "relative_humidity_2m");
   url.searchParams.set("timezone", "auto");
   url.searchParams.set("forecast_days", "7");
 
@@ -230,7 +230,7 @@ export async function fetchForecast(lat: number, lon: number): Promise<ForecastR
   for (let d = 0; d < 7; d++) {
     const start = d * 24;
     const end = start + 24;
-    const slice = hourly.relativehumidity_2m.slice(start, end).filter((v) => v != null);
+    const slice = hourly.relative_humidity_2m.slice(start, end).filter((v) => v != null);
     const avg = slice.length > 0 ? slice.reduce((a, b) => a + b, 0) / slice.length : 60;
     dailyAvgHumidity.push(Math.round(avg));
   }
@@ -243,7 +243,7 @@ export async function fetchForecast(lat: number, lon: number): Promise<ForecastR
     const tempMin = daily.temperature_2m_min[i] ?? 10;
     const precipitationSum = daily.precipitation_sum[i] ?? 0;
     const precipProbability = daily.precipitation_probability_max[i] ?? 0;
-    const windspeedMax = daily.windspeed_10m_max[i] ?? 10;
+    const windspeedMax = daily.wind_speed_10m_max[i] ?? 10;
     const uvIndexMax = daily.uv_index_max[i] ?? 3;
     const weathercode = daily.weathercode[i] ?? 0;
     const et0 = daily.et0_fao_evapotranspiration[i] ?? 3;

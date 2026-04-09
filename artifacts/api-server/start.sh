@@ -7,9 +7,9 @@ PYTHON=$(command -v python3.11 2>/dev/null \
 
 WORKSPACE="$(cd "$(dirname "$0")/../.." && pwd)"
 
-echo "[FarmPal] Starting ML service (sklearn ensemble)..."
+echo "[FarmPal] Python ML service disabled for Render deployment."
 cd "${WORKSPACE}/artifacts/api-server"
-${PYTHON} -m gunicorn \
+false \
   --bind 0.0.0.0:5000 \
   --workers 1 \
   --timeout 300 \
@@ -20,6 +20,6 @@ ${PYTHON} -m gunicorn \
   && echo "[FarmPal] ML service daemon started on port 5000" \
   || echo "[FarmPal] ML service failed to start — API will use rules fallback"
 
-echo "[FarmPal] Starting API server on port ${PORT:-8080}..."
+echo "[FarmPal] Starting standalone API server on port ${PORT:-5000}..."
 cd "${WORKSPACE}"
-exec node --enable-source-maps artifacts/api-server/dist/index.mjs
+exec node artifacts/api-server/dist/index.js

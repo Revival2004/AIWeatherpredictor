@@ -18,7 +18,7 @@ export interface OpenMeteoResponse {
   current_weather: OpenMeteoCurrentWeather;
   hourly: {
     time: string[];
-    relativehumidity_2m: number[];
+    relative_humidity_2m: number[];
     surface_pressure: number[];
   };
 }
@@ -46,7 +46,7 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherRes
   url.searchParams.set("latitude", String(lat));
   url.searchParams.set("longitude", String(lon));
   url.searchParams.set("current_weather", "true");
-  url.searchParams.set("hourly", "relativehumidity_2m,surface_pressure");
+  url.searchParams.set("hourly", "relative_humidity_2m,surface_pressure");
   url.searchParams.set("forecast_days", "1");
   url.searchParams.set("timezone", "auto");
 
@@ -86,7 +86,7 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherRes
       }
     }
 
-    const humidity = data.hourly.relativehumidity_2m[closestIdx] ?? 60;
+    const humidity = data.hourly.relative_humidity_2m[closestIdx] ?? 60;
     const pressure = data.hourly.surface_pressure[closestIdx] ?? 1013;
 
     return {

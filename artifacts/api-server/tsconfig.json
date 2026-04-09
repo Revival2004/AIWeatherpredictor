@@ -1,17 +1,26 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "rootDir": "src",
-    "types": ["node"]
+    "outDir": "dist",
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"],
-  "references": [
-    {
-      "path": "../../lib/db"
-    },
-    {
-      "path": "../../lib/api-zod"
-    }
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/lib/aiService.ts",
+    "src/lib/feedbackService.ts",
+    "src/lib/mlService.ts",
+    "src/lib/plantingAdvisoryService.ts",
+    "src/lib/schedulerService.ts",
+    "src/routes/locations.ts",
+    "src/routes/weather.ts"
   ]
 }

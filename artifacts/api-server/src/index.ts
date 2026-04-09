@@ -1,28 +1,11 @@
-import app from "./app";
-import { logger } from "./lib/logger";
-import { startScheduler } from "./lib/schedulerService.js";
+import app from "./app.js";
+import { logger } from "./lib/logger.js";
+import { startScheduler } from "./lib/schedulerRuntime.js";
 import { addLocation, getActiveLocations } from "./lib/locationService.js";
 
-const rawPort = process.env["PORT"];
+const port = Number(process.env.PORT || 5000);
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-app.listen(port, async (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-
+const server = app.listen(port, async () => {
   logger.info({ port }, "Server listening");
 
   // Seed a default Nakuru Farm location if no locations exist yet.
@@ -40,4 +23,9 @@ app.listen(port, async (err) => {
 
   // Start hourly collection scheduler
   startScheduler(logger);
+});
+
+server.on("error", (err) => {
+  logger.error({ err }, "Error listening on port");
+  process.exit(1);
 });

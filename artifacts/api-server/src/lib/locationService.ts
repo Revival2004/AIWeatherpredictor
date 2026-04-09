@@ -2,51 +2,63 @@
  * Location Service — manages tracked locations that get auto-collected hourly.
  */
 
-import { db, trackedLocationsTable, type InsertTrackedLocation } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import {
+  addLocationRecord,
+  deleteLocationRecord,
+  listActiveLocations,
+  listLocations,
+  updateLocationRecord,
+} from "./store.js";
 
-export async function addLocation(name: string, latitude: number, longitude: number) {
-  const [location] = await db
-    .insert(trackedLocationsTable)
-    .values({ name, latitude, longitude, active: true })
-    .returning();
-  return location;
+export async function addLocation(
+  name: string,
+  latitude: number,
+  longitude: number,
+  options?: {
+    elevation?: number | null;
+    cropType?: string | null;
+    plantingDate?: string | null;
+  },
+) {
+  return addLocationRecord({
+    name,
+    latitude,
+    longitude,
+    elevation: options?.elevation ?? null,
+    cropType: options?.cropType ?? null,
+    plantingDate: options?.plantingDate ?? null,
+    active: true,
+  });
 }
 
 export async function getLocations() {
-  return db.select().from(trackedLocationsTable).orderBy(desc(trackedLocationsTable.createdAt));
+  return listLocations();
 }
 
 export async function getActiveLocations() {
-  return db
-    .select()
-    .from(trackedLocationsTable)
-    .where(eq(trackedLocationsTable.active, true))
-    .orderBy(desc(trackedLocationsTable.createdAt));
+  return listActiveLocations();
+}
+
+export async function updateLocation(
+  id: number,
+  patch: {
+    elevation?: number | null;
+    cropType?: string | null;
+    plantingDate?: string | null;
+    active?: boolean;
+  },
+) {
+  return updateLocationRecord(id, patch);
 }
 
 export async function deactivateLocation(id: number) {
-  const [updated] = await db
-    .update(trackedLocationsTable)
-    .set({ active: false })
-    .where(eq(trackedLocationsTable.id, id))
-    .returning();
-  return updated;
+  return updateLocationRecord(id, { active: false });
 }
 
 export async function activateLocation(id: number) {
-  const [updated] = await db
-    .update(trackedLocationsTable)
-    .set({ active: true })
-    .where(eq(trackedLocationsTable.id, id))
-    .returning();
-  return updated;
+  return updateLocationRecord(id, { active: true });
 }
 
 export async function deleteLocation(id: number) {
-  const [deleted] = await db
-    .delete(trackedLocationsTable)
-    .where(eq(trackedLocationsTable.id, id))
-    .returning();
-  return deleted;
+  return deleteLocationRecord(id);
 }
