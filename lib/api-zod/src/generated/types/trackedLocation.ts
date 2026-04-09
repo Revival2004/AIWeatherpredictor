@@ -12,5 +12,9 @@ export interface TrackedLocation {
   latitude: number;
   longitude: number;
   active: boolean;
+  elevation?: number | null;
+  cropType?: string | null;
+  plantingDate?: string | null;
   createdAt: Date;
+  updatedAt?: Date;
 }

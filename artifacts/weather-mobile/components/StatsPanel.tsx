@@ -119,6 +119,7 @@ function ConditionBar({ label, count, maxCount }: ConditionBarProps) {
 
 export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
   const colors = useColors();
+  const DEGREE = "\u00B0";
 
   if (isLoading || !stats) {
     return (
@@ -132,7 +133,7 @@ export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
             fontSize: 14,
           }}
         >
-          {isLoading ? "Loading statistics…" : "No data yet — fetch weather to get started"}
+          {isLoading ? "Loading statistics..." : "No data yet - fetch weather to get started"}
         </Text>
       </View>
     );
@@ -156,21 +157,21 @@ export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
         <StatTile
           icon="thermometer"
           label="Avg Temperature"
-          value={stats.avgTemperature != null ? `${Math.round(stats.avgTemperature)}°C` : "—"}
+          value={stats.avgTemperature != null ? `${Math.round(stats.avgTemperature)}${DEGREE}C` : "--"}
           iconColor="#E65100"
           bgColor="#FFF3E0"
         />
         <StatTile
           icon="droplet"
           label="Avg Humidity"
-          value={stats.avgHumidity != null ? `${Math.round(stats.avgHumidity)}%` : "—"}
+          value={stats.avgHumidity != null ? `${Math.round(stats.avgHumidity)}%` : "--"}
           iconColor="#1565C0"
           bgColor="#E3F2FD"
         />
         <StatTile
           icon="wind"
           label="Avg Wind"
-          value={stats.avgWindspeed != null ? `${Math.round(stats.avgWindspeed)} km/h` : "—"}
+          value={stats.avgWindspeed != null ? `${Math.round(stats.avgWindspeed)} km/h` : "--"}
           iconColor={colors.primary}
           bgColor={`${colors.primary}18`}
         />
@@ -183,7 +184,7 @@ export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
         />
       </View>
 
-      {condEntries.length > 0 && (
+      {condEntries.length > 0 ? (
         <View
           style={{
             marginHorizontal: 16,
@@ -209,7 +210,7 @@ export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
             <ConditionBar key={pred} label={pred} count={count} maxCount={maxCount} />
           ))}
         </View>
-      )}
+      ) : null}
     </View>
   );
 }

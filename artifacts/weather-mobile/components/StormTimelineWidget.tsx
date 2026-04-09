@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getBaseUrl } from "@/lib/api-client";
 
 interface Slot {
   time: string;
@@ -18,8 +19,7 @@ interface StormTimeline {
 }
 
 function getApiBase() {
-  const domain = process.env.EXPO_PUBLIC_DOMAIN;
-  return domain ? `https://${domain}` : "http://localhost:8080";
+  return getBaseUrl() ?? "http://localhost:8080";
 }
 
 function formatArrival(minutes: number): string {
@@ -85,7 +85,7 @@ export default function StormTimelineWidget({ lat, lon }: { lat: number; lon: nu
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: headerColor }]}>{headerLabel}</Text>
           <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-            15-min precipitation forecast · next 3h
+            15-min precipitation forecast - next 3h
           </Text>
         </View>
       </View>
@@ -206,3 +206,4 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
 });
+

@@ -133,7 +133,7 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
             </Text>
           </View>
           <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 8 }}>
-            {t("aiPrediction")} · 2-hour window
+            {t("aiPrediction")} - 2-hour window
           </Text>
 
           {/* Segmented probability bar */}
@@ -161,7 +161,7 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
         </View>
       </View>
 
-      {/* Per-model votes — only shown for sklearn */}
+      {/* Per-model votes - only shown for sklearn */}
       {isSklearn && mp && (
         <View style={{
           flexDirection: "row",
@@ -220,6 +220,59 @@ function isLegacyStoredDefault(saved: unknown): boolean {
   );
 }
 
+function SectionHeader({
+  title,
+  subtitle,
+  right,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+}) {
+  const colors = useColors();
+
+  return (
+    <View
+      style={{
+        marginHorizontal: 20,
+        marginTop: 22,
+        marginBottom: 10,
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        gap: 12,
+      }}
+    >
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{
+            fontSize: 17,
+            lineHeight: 22,
+            fontFamily: "Inter_700Bold",
+            color: colors.foreground,
+          }}
+        >
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text
+            style={{
+              marginTop: 3,
+              fontSize: 12,
+              lineHeight: 17,
+              fontFamily: "Inter_400Regular",
+              color: colors.mutedForeground,
+            }}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {right}
+    </View>
+  );
+}
+
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -265,8 +318,8 @@ export default function DashboardScreen() {
     const applyGps = (c: Coords, silent = false) => {
       if (silent && savedCoords) {
         const moved = distanceKm(savedCoords, c);
-        if (moved < 5) return; // hasn't moved significantly — keep saved location
-        // Farmer has moved — update silently and show brief banner
+        if (moved < 5) return; // hasn't moved significantly - keep saved location
+        // Farmer has moved - update silently and show brief banner
         setLocationUpdated(true);
         setTimeout(() => setLocationUpdated(false), 4000);
       }
@@ -329,13 +382,13 @@ export default function DashboardScreen() {
             setLocationLabel(saved.label ?? null);
             setFetchEnabled(true);
             setLocError(null);
-            // Step 2: Silently re-check GPS in background — auto-update if moved >5 km
+            // Step 2: Silently re-check GPS in background - auto-update if moved >5 km
             tryGps(true);
             return;
           }
         } catch {}
       }
-      // No saved location — request device location with a visible loading state
+      // No saved location - request device location with a visible loading state
       setGeoLoading(true);
       tryGps(false);
     }).catch(() => {
@@ -454,7 +507,7 @@ export default function DashboardScreen() {
     }
   };
 
-  // Offline caching — save good data, restore when offline
+  // Offline caching - save good data, restore when offline
   useEffect(() => {
     if (!coords) return;
     const key = `${CACHE_KEY_PREFIX}${coords.latitude.toFixed(3)}_${coords.longitude.toFixed(3)}`;
@@ -477,7 +530,7 @@ export default function DashboardScreen() {
     if (weatherError && cachedData) setIsOffline(true);
   }, [weatherError, cachedData]);
 
-  // Rain alert notification — fires when fresh prediction crosses 70%
+  // Rain alert notification - fires when fresh prediction crosses 70%
   const lastAlertedProbRef = useRef<number>(0);
   useEffect(() => {
     if (!rainData) return;
@@ -526,8 +579,8 @@ export default function DashboardScreen() {
       justifyContent: "center",
     },
     scrollContent: {
-      // Web/iOS: tab bar is absolute (floats over content) — need extra bottom room.
-      // Android: tab bar sits in normal layout flow — just a small courtesy gap.
+      // Web/iOS: tab bar is absolute (floats over content) - need extra bottom room.
+      // Android: tab bar sits in normal layout flow - just a small courtesy gap.
       paddingBottom: Platform.OS === "android" ? insets.bottom + 20 : insets.bottom + 100,
       paddingTop: 4,
     },
@@ -606,7 +659,7 @@ export default function DashboardScreen() {
         <View style={styles.titleBlock}>
           <Text style={styles.title}>FarmPal</Text>
           <Text style={styles.subtitle}>
-            {locationLabel ? locationLabel : t("appSubtitle")}
+            {locationLabel ? locationLabel : "Live weather and field decisions for your farm"}
           </Text>
         </View>
         <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
@@ -653,17 +706,17 @@ export default function DashboardScreen() {
         <View style={{ backgroundColor: "#3D8B37", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Feather name="map-pin" size={13} color="#fff" />
           <Text style={{ color: "#fff", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
-            Location updated — your farm moved, showing new area
+            Location updated - showing your latest farm area
           </Text>
         </View>
       )}
 
-      {/* Barometer trend banner — only shown when sensor detects significant pressure change */}
+      {/* Barometer trend banner - only shown when sensor detects significant pressure change */}
       {baro.available && baro.trend === "falling" && (
         <View style={{ backgroundColor: "#1D4ED822", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#1D4ED833" }}>
           <Feather name="trending-down" size={13} color="#1D4ED8" />
           <Text style={{ color: "#1D4ED8", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
-            Pressure falling on your farm — rain may be approaching
+            Pressure is falling on your farm - rain may be approaching
           </Text>
           <Text style={{ color: "#1D4ED899", fontSize: 11, fontFamily: "Inter_400Regular" }}>
             {baro.pressure?.toFixed(0)} hPa
@@ -674,7 +727,7 @@ export default function DashboardScreen() {
         <View style={{ backgroundColor: "#15803D22", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#15803D33" }}>
           <Feather name="trending-up" size={13} color="#15803D" />
           <Text style={{ color: "#15803D", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
-            Pressure rising — conditions improving
+            Pressure is rising - field conditions are improving
           </Text>
           <Text style={{ color: "#15803D99", fontSize: 11, fontFamily: "Inter_400Regular" }}>
             {baro.pressure?.toFixed(0)} hPa
@@ -687,7 +740,7 @@ export default function DashboardScreen() {
         <View style={{ backgroundColor: "#8B5A2B", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Feather name="wifi-off" size={13} color="#fff" />
           <Text style={{ color: "#fff", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
-            {t("offlineBanner")} · {Math.round((Date.now() - (cachedData.ts ?? 0)) / 60000)}m ago
+            {t("offlineBanner")} - {Math.round((Date.now() - (cachedData.ts ?? 0)) / 60000)}m ago
           </Text>
         </View>
       )}
@@ -731,7 +784,26 @@ export default function DashboardScreen() {
       />
 
       {locError && (
-        <Text style={styles.locErrorText}>{locError}</Text>
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginTop: 6,
+            borderRadius: 14,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            backgroundColor: `${colors.warning}14`,
+            borderWidth: 1,
+            borderColor: `${colors.warning}35`,
+            flexDirection: "row",
+            alignItems: "flex-start",
+            gap: 10,
+          }}
+        >
+          <Feather name="map-pin" size={15} color={colors.warning} style={{ marginTop: 1 }} />
+          <Text style={[styles.locErrorText, { flex: 1, marginTop: 0, textAlign: "left", color: colors.warning }]}>
+            {locError}
+          </Text>
+        </View>
       )}
 
       <ScrollView
@@ -751,9 +823,10 @@ export default function DashboardScreen() {
           isLoading={isLoading}
           error={weatherError as Error | null}
           onRefresh={() => refetch()}
+          locationName={locationLabel}
         />
 
-        {weatherError && (
+        {__DEV__ && weatherError && (
           <Text style={{ color: "red", fontSize: 11, padding: 10, fontFamily: "Inter_400Regular" }}>
             {`DEBUG: ${(weatherError as Error)?.message ?? String(weatherError)}`}
           </Text>
@@ -763,10 +836,13 @@ export default function DashboardScreen() {
           <AlertsBanner alerts={alertsData.alerts} />
         )}
 
-        {/* Community Zone — nearby farmers sharing data */}
+        {/* Community Zone - nearby farmers sharing data */}
         {coords && (
           <>
-            <Text style={styles.sectionLabel}>COMMUNITY ZONE</Text>
+            <SectionHeader
+              title="Nearby farm signal"
+              subtitle="What farmers close to this field are seeing right now"
+            />
             <CommunityInsightCard
               lat={coords.latitude}
               lon={coords.longitude}
@@ -776,13 +852,16 @@ export default function DashboardScreen() {
 
         {weatherData && (
           <>
-            <Text style={styles.sectionLabel}>CONDITIONS</Text>
+            <SectionHeader
+              title="Field conditions"
+              subtitle="The current readings shaping today&apos;s farm decisions"
+            />
             <View style={styles.extraRow}>
               <View style={styles.extraCard}>
                 <Text style={styles.extraLabel}>Temperature</Text>
                 <Text style={styles.extraValue}>
                   {Math.round(weatherData.weather.temperature)}
-                  <Text style={styles.extraUnit}>°C</Text>
+                  <Text style={styles.extraUnit}>{"\u00B0"}C</Text>
                 </Text>
               </View>
               <View style={styles.extraCard}>
@@ -810,19 +889,20 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            {/* ML Rain Prediction — uses device GPS location */}
+            {/* ML Rain Prediction - uses device GPS location */}
             {rainData && (
               <>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 20, marginTop: 20, marginBottom: 8 }}>
-                  <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, letterSpacing: 0.8 }}>
-                    RAIN PREDICTION (2H)
-                  </Text>
-                  <MLStatusBadge
-                    modelVersion={rainData.modelVersion}
-                    accuracy={rainData.modelVersion?.includes("acc") ? parseFloat(rainData.modelVersion.split("acc")[1] ?? "0") : undefined}
-                    isOffline={isOffline}
-                  />
-                </View>
+                <SectionHeader
+                  title="Rain chance soon"
+                  subtitle="Model view for the next 2 hours"
+                  right={
+                    <MLStatusBadge
+                      modelVersion={rainData.modelVersion}
+                      accuracy={rainData.modelVersion?.includes("acc") ? parseFloat(rainData.modelVersion.split("acc")[1] ?? "0") : undefined}
+                      isOffline={isOffline}
+                    />
+                  }
+                />
                 <RainPredictionCard data={rainData} />
               </>
             )}
@@ -835,7 +915,7 @@ export default function DashboardScreen() {
               />
             )}
 
-            {/* Planting Advisory — false-onset detection */}
+            {/* Planting Advisory - false-onset detection */}
             {plantingAdvisory && (
               <>
                 <Text style={styles.sectionLabel}>PLANTING ADVISORY</Text>
@@ -864,3 +944,4 @@ export default function DashboardScreen() {
     </View>
   );
 }
+

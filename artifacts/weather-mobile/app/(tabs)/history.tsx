@@ -1,5 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -16,16 +17,64 @@ import { HistoryCard } from "@/components/HistoryCard";
 import { useColors } from "@/hooks/useColors";
 
 const LIMITS = [10, 25, 50];
+const LAST_LOC_KEY = "microclimate_last_location_v1";
+
+function parseStoredCoords(raw: string | null): { lat: number; lon: number } | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      coords?: { latitude?: number; longitude?: number };
+    };
+
+    const latitude = parsed.coords?.latitude;
+    const longitude = parsed.coords?.longitude;
+    if (typeof latitude !== "number" || typeof longitude !== "number") {
+      return null;
+    }
+
+    return { lat: latitude, lon: longitude };
+  } catch {
+    return null;
+  }
+}
 
 export default function HistoryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [limit, setLimit] = useState(25);
+  const [farmCoords, setFarmCoords] = useState<{ lat: number; lon: number } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    AsyncStorage.getItem(LAST_LOC_KEY)
+      .then((raw) => {
+        if (active) {
+          setFarmCoords(parseStoredCoords(raw));
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setFarmCoords(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const historyParams = farmCoords
+    ? { limit, lat: farmCoords.lat, lon: farmCoords.lon }
+    : { limit };
 
   const { data, isLoading, error, refetch, isRefetching } =
     useGetWeatherHistory(
-      { limit },
-      { query: { queryKey: getGetWeatherHistoryQueryKey({ limit }), staleTime: 60 * 1000 } }
+      historyParams,
+      { query: { queryKey: getGetWeatherHistoryQueryKey(historyParams), staleTime: 60 * 1000 } }
     );
 
   const styles = StyleSheet.create({
@@ -149,7 +198,12 @@ export default function HistoryScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>History</Text>
+        <View>
+          <Text style={styles.title}>History</Text>
+          <Text style={[styles.filterLabel, { marginTop: 4, marginRight: 0 }]}>
+            {farmCoords ? "Recent readings near your selected farm" : "Recent readings across saved observations"}
+          </Text>
+        </View>
         <Pressable
           style={styles.refreshBtn}
           onPress={() => refetch()}

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { generateAlerts } from "../lib/alertsService.js";
+import { requireAdminAuth } from "../lib/adminAuth.js";
 import { fetchForecast } from "../lib/forecastService.js";
 import {
   loadModel,
@@ -154,7 +155,7 @@ router.get("/weather", async (req, res): Promise<void> => {
     weather = await fetchWeather(lat, lon);
   } catch (error) {
     req.log?.warn({ err: error }, "Open-Meteo fetch failed, using cached weather");
-    const cached = getLatestWeatherRecordNear(lat, lon, 2.7);
+    const cached = await getLatestWeatherRecordNear(lat, lon, 2.7);
     if (!cached) {
       res.status(500).json({ error: "Failed to fetch weather data." });
       return;
@@ -191,8 +192,8 @@ router.get("/weather", async (req, res): Promise<void> => {
   const reasoning = buildPredictionReasoning(weather, rainPrediction.probability);
   const advice = buildFarmingAdvice(weather, rainPrediction.predictionValue, rainPrediction.probability);
 
-  const nearbyHistory = listWeatherRecords({ lat, lon, radiusDegrees: 2.7, limit: 100 });
-  const record = addWeatherRecord({
+  const nearbyHistory = await listWeatherRecords({ lat, lon, radiusDegrees: 2.7, limit: 100 });
+  const record = await addWeatherRecord({
     latitude: lat,
     longitude: lon,
     temperature: weather.temperature,
@@ -238,7 +239,7 @@ router.get("/weather/history", async (req, res): Promise<void> => {
     return;
   }
 
-  const records = listWeatherRecords({
+  const records = await listWeatherRecords({
     limit: parsed.data.limit,
     lat: parsed.data.lat,
     lon: parsed.data.lon,
@@ -281,7 +282,7 @@ router.get("/weather/alerts", async (req, res): Promise<void> => {
 });
 
 router.get("/weather/stats", async (_req, res): Promise<void> => {
-  const stats = getWeatherStats();
+  const stats = await getWeatherStats();
   res.json({
     totalReadings: stats.totalReadings,
     avgTemperature: roundMaybe(stats.avgTemperature),
@@ -306,9 +307,9 @@ router.post("/collect", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/metrics", async (_req, res): Promise<void> => {
+router.get("/metrics", requireAdminAuth, async (_req, res): Promise<void> => {
   const model = loadModel();
-  const predictions = listPredictionRecords();
+  const predictions = await listPredictionRecords();
   const resolved = predictions.filter((prediction) => prediction.isCorrect !== null);
   const correct = resolved.filter((prediction) => prediction.isCorrect === true).length;
   const accuracy = resolved.length > 0
@@ -333,11 +334,11 @@ router.get("/metrics", async (_req, res): Promise<void> => {
           gbAccuracy: toPercent(model.gbAccuracy),
         }
       : null,
-    observations: listWeatherRecords().length,
+    observations: (await listWeatherRecords()).length,
   });
 });
 
-router.post("/train", async (req, res): Promise<void> => {
+router.post("/train", requireAdminAuth, async (req, res): Promise<void> => {
   try {
     const result = await trainModel(req.log);
     res.json({
@@ -353,7 +354,7 @@ router.post("/train", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/bootstrap", async (req, res): Promise<void> => {
+router.post("/bootstrap", requireAdminAuth, async (req, res): Promise<void> => {
   try {
     const body = req.body && Object.keys(req.body).length ? req.body : {};
     const response = await fetch(`${ML_SERVICE_URL}/bootstrap`, {
@@ -402,7 +403,7 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
     const advice = buildFarmingAdvice(weather, prediction.predictionValue, prediction.probability);
 
     const targetTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
-    addPredictionRecord({
+    await addPredictionRecord({
       latitude: parsed.data.lat,
       longitude: parsed.data.lon,
       predictedAt: new Date(),
@@ -450,19 +451,24 @@ router.post("/feedback", async (req, res): Promise<void> => {
     return;
   }
 
-  addFeedbackRecord({
-    latitude: parsed.data.lat,
-    longitude: parsed.data.lon,
-    question: parsed.data.question,
-    answer: parsed.data.answer,
-    locationName: parsed.data.locationName ?? null,
-  });
+  try {
+    await addFeedbackRecord({
+      latitude: parsed.data.lat,
+      longitude: parsed.data.lon,
+      question: parsed.data.question,
+      answer: parsed.data.answer,
+      locationName: parsed.data.locationName ?? null,
+    });
 
-  res.json({
-    success: true,
-    autoRetrained: false,
-    mlMode: ML_MODE,
-  });
+    res.json({
+      success: true,
+      autoRetrained: false,
+      mlMode: ML_MODE,
+    });
+  } catch (error) {
+    req.log?.error({ err: error }, "Failed to store feedback");
+    res.status(500).json({ error: "Failed to store feedback." });
+  }
 });
 
 router.get("/weather/storm-timeline", async (req, res): Promise<void> => {
@@ -598,7 +604,7 @@ router.get("/weather/community", async (req, res): Promise<void> => {
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
 
-  const feedback = getNearbyRecords(listFeedbackRecords(), lat, lon, radiusDegrees)
+  const feedback = getNearbyRecords(await listFeedbackRecords(), lat, lon, radiusDegrees)
     .filter((entry) => entry.createdAt.getTime() >= thirtyDaysAgo);
 
   const uniqueZones = new Set(
@@ -606,7 +612,7 @@ router.get("/weather/community", async (req, res): Promise<void> => {
   );
 
   const recent = feedback.filter((entry) => entry.createdAt.getTime() >= oneDayAgo);
-  const predictions = getNearbyRecords(listPredictionRecords(), lat, lon, radiusDegrees)
+  const predictions = getNearbyRecords(await listPredictionRecords(), lat, lon, radiusDegrees)
     .filter((entry) => entry.isCorrect !== null);
 
   const correct = predictions.filter((entry) => entry.isCorrect === true).length;

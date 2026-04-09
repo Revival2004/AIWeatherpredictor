@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { 
   useGetWeather, 
   getGetWeatherQueryKey, 
@@ -7,17 +7,56 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { MapPin, Thermometer, Wind, Droplets, Activity, Loader2, AlertCircle, ArrowRight, History } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { MapPin, Thermometer, Wind, Droplets, Activity, Loader2, AlertCircle, Compass, History } from "lucide-react";
 import { getWeatherMeta, formatDate } from "@/lib/weather-utils";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAdminSession } from "@/contexts/admin-session";
+
+const LAST_LOCATION_KEY = "farmpal_admin_last_location_v1";
+const DEGREE = "\u00B0";
+
+type Coordinates = {
+  lat: number;
+  lon: number;
+};
+
+function loadSavedLocation(): Coordinates | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(LAST_LOCATION_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Coordinates;
+    if (!Number.isFinite(parsed.lat) || !Number.isFinite(parsed.lon)) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 export function Home() {
-  const [location, setLocation] = useState<{lat: number, lon: number} | null>(null);
+  const [location, setLocation] = useState<Coordinates | null>(() => loadSavedLocation());
   const [geoError, setGeoError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [manualLat, setManualLat] = useState("");
+  const [manualLon, setManualLon] = useState("");
   const queryClient = useQueryClient();
+  const { token } = useAdminSession();
+  const historyParams = useMemo(
+    () => (location ? { limit: 5, lat: location.lat, lon: location.lon } : { limit: 5 }),
+    [location],
+  );
 
   const { data: weatherData, isLoading: isLoadingWeather, error: weatherError } = useGetWeather(
     location!,
@@ -30,21 +69,32 @@ export function Home() {
   );
 
   const { data: historyData } = useGetWeatherHistory(
-    { limit: 5 },
+    historyParams,
     {
       query: {
-        queryKey: getGetWeatherHistoryQueryKey({ limit: 5 })
+        queryKey: getGetWeatherHistoryQueryKey(historyParams)
       }
     }
   );
 
-  // Invalidate history when new weather is fetched
   useEffect(() => {
-    if (weatherData) {
-      queryClient.invalidateQueries({ queryKey: getGetWeatherHistoryQueryKey({ limit: 5 }) });
+    if (weatherData?.recordId) {
+      queryClient.invalidateQueries({ queryKey: getGetWeatherHistoryQueryKey(historyParams) });
       queryClient.invalidateQueries({ queryKey: ["/api/weather/stats"] });
+      if (token) {
+        queryClient.invalidateQueries({ queryKey: ["admin-stats", token] });
+        queryClient.invalidateQueries({ queryKey: ["admin-history", token] });
+      }
     }
-  }, [weatherData, queryClient]);
+  }, [historyParams, queryClient, token, weatherData?.recordId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !location) {
+      return;
+    }
+
+    window.localStorage.setItem(LAST_LOCATION_KEY, JSON.stringify(location));
+  }, [location]);
 
   const handleGetWeather = () => {
     setIsLocating(true);
@@ -73,6 +123,26 @@ export function Home() {
     );
   };
 
+  const handleManualLocation = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const lat = Number.parseFloat(manualLat);
+    const lon = Number.parseFloat(manualLon);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setGeoError("Enter a valid latitude and longitude to load weather manually.");
+      return;
+    }
+
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      setGeoError("Latitude must be between -90 and 90, and longitude between -180 and 180.");
+      return;
+    }
+
+    setGeoError(null);
+    setLocation({ lat, lon });
+  };
+
   const isFetching = isLocating || isLoadingWeather;
 
   return (
@@ -84,19 +154,45 @@ export function Home() {
             <MapPin className="h-10 w-10" />
           </div>
           <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground">
-            Hyper-Local Climate Intelligence
+            Farm conditions at the exact field you care about
           </h2>
           <p className="text-lg text-muted-foreground max-w-lg mx-auto">
-            Get real-time AI atmospheric analysis based on your exact coordinates. Precise, scientific, and actionable.
+            Use device location for the fastest scan, or enter coordinates manually when GPS is blocked.
           </p>
-          <Button 
-            size="lg" 
+          <Button
+            size="lg"
             className="rounded-full px-8 py-6 text-lg h-auto shadow-xl hover:shadow-primary/25 transition-all"
             onClick={handleGetWeather}
           >
             <MapPin className="mr-2 h-5 w-5" />
-            Get My Local Weather
+            Use Device Location
           </Button>
+          <Card className="w-full max-w-xl border-border/60 bg-card/70 text-left shadow-xl">
+            <CardContent className="space-y-4 p-5">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Compass className="h-4 w-4 text-primary" />
+                Manual coordinate fallback
+              </div>
+              <form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={handleManualLocation}>
+                <Input
+                  inputMode="decimal"
+                  placeholder="Latitude"
+                  value={manualLat}
+                  onChange={(event) => setManualLat(event.target.value)}
+                />
+                <Input
+                  inputMode="decimal"
+                  placeholder="Longitude"
+                  value={manualLon}
+                  onChange={(event) => setManualLon(event.target.value)}
+                />
+                <Button type="submit">Load</Button>
+              </form>
+              <p className="text-xs text-muted-foreground">
+                Example: Nairobi CBD is approximately -1.2864, 36.8172.
+              </p>
+            </CardContent>
+          </Card>
           {geoError && (
             <p className="text-sm text-destructive flex items-center gap-2 mt-4 bg-destructive/10 px-4 py-2 rounded-lg">
               <AlertCircle className="h-4 w-4" />
@@ -121,8 +217,10 @@ export function Home() {
       {weatherError && !isFetching && (
         <div className="p-8 rounded-2xl bg-destructive/10 border border-destructive/20 text-center space-y-4">
           <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
-          <h3 className="text-xl font-bold text-destructive">Atmospheric Scan Failed</h3>
-          <p className="text-muted-foreground">{weatherError.message || "Could not retrieve weather data"}</p>
+          <h3 className="text-xl font-bold text-destructive">Could not load field conditions</h3>
+          <p className="text-muted-foreground">
+            We could not retrieve the latest weather for this location. Check connectivity or try another scan.
+          </p>
           <Button variant="outline" onClick={handleGetWeather}>Retry Scan</Button>
         </div>
       )}
@@ -133,7 +231,7 @@ export function Home() {
             <div>
               <p className="text-sm font-mono text-muted-foreground mb-1 flex items-center gap-2">
                 <MapPin className="h-3 w-3" />
-                {weatherData.location.lat.toFixed(4)}째, {weatherData.location.lon.toFixed(4)}째
+                {weatherData.location.lat.toFixed(4)}{DEGREE}, {weatherData.location.lon.toFixed(4)}{DEGREE}
               </p>
               <h2 className="text-3xl font-bold">Current Conditions</h2>
             </div>
@@ -162,7 +260,7 @@ export function Home() {
                   </span>
                 </div>
                 <div className="text-7xl font-mono tracking-tighter font-bold py-4">
-                  {weatherData.weather.temperature.toFixed(1)}째
+                  {weatherData.weather.temperature.toFixed(1)}{DEGREE}
                 </div>
                 <div className="text-sm font-mono text-muted-foreground">
                   OBSERVATION: {formatDate(weatherData.weather.time)}
@@ -175,7 +273,7 @@ export function Home() {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-medium text-primary uppercase tracking-widest flex items-center gap-2">
-                    <Activity className="w-4 h-4" /> AI Prediction
+                    <Activity className="w-4 h-4" /> Field outlook
                     {weatherData.prediction.modelVersion && weatherData.prediction.modelVersion !== "rules" && (
                       <span className={`text-xs px-2 py-0.5 rounded font-bold tracking-wide ${
                         weatherData.prediction.modelVersion === "pattern-learned"
@@ -203,12 +301,12 @@ export function Home() {
               
               <div className="mt-8 pt-6 border-t border-border/50">
                 <p className="text-sm text-muted-foreground font-mono leading-relaxed">
-                  <span className="text-foreground font-bold mr-2">REASONING:</span>
+                  <span className="text-foreground font-bold mr-2">WHY:</span>
                   {weatherData.prediction.reasoning}
                 </p>
                 {(weatherData.prediction.dataPoints ?? 0) > 0 && (
                   <p className="text-xs text-muted-foreground/60 font-mono mt-3">
-                    Informed by {weatherData.prediction.dataPoints} historical readings 쨌 model: {weatherData.prediction.modelVersion}
+                    Informed by {weatherData.prediction.dataPoints} historical readings � model: {weatherData.prediction.modelVersion}
                   </p>
                 )}
               </div>
@@ -242,7 +340,7 @@ export function Home() {
                 </div>
                 <div>
                   <div className="stat-label mb-1">Temperature</div>
-                  <div className="stat-value">{weatherData.weather.temperature.toFixed(1)}<span className="text-base text-muted-foreground">째C</span></div>
+                  <div className="stat-value">{weatherData.weather.temperature.toFixed(1)}<span className="text-base text-muted-foreground">{DEGREE}C</span></div>
                 </div>
               </div>
               
@@ -285,7 +383,7 @@ export function Home() {
                   })}
                 </div>
                 <div>
-                  <div className="text-2xl font-mono font-bold mb-1">{record.temperature.toFixed(1)}째</div>
+                  <div className="text-2xl font-mono font-bold mb-1">{record.temperature.toFixed(1)}{DEGREE}</div>
                   <div className="text-xs text-muted-foreground line-clamp-2" title={record.prediction}>
                     {record.prediction}
                   </div>
@@ -298,3 +396,7 @@ export function Home() {
     </div>
   );
 }
+
+
+
+

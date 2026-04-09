@@ -1,10 +1,13 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
-import { CloudRain, Compass, LineChart, History } from "lucide-react";
+import { CloudRain, Compass, LineChart, History, LogOut, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useAdminSession } from "@/contexts/admin-session";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const { admin, logout } = useAdminSession();
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: Compass },
@@ -20,8 +23,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <CloudRain className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="font-bold text-lg leading-tight tracking-tight">Microclimate</h1>
-            <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">AI Predictor</p>
+            <h1 className="font-bold text-lg leading-tight tracking-tight">FarmPal</h1>
+            <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Admin Console</p>
           </div>
         </div>
         
@@ -46,6 +49,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+
+        <div className="border-t border-border/50 px-4 py-4">
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-background/70 px-3 py-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Signed in</p>
+              <p className="truncate text-sm font-medium text-foreground">{admin?.email ?? "Admin"}</p>
+            </div>
+          </div>
+          <Button className="w-full justify-start rounded-xl" size="sm" variant="outline" onClick={() => void logout()}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign out
+          </Button>
+        </div>
       </aside>
       
       <main className="flex-1 relative z-0">

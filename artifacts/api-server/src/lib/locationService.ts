@@ -20,7 +20,7 @@ export async function addLocation(
     plantingDate?: string | null;
   },
 ) {
-  return addLocationRecord({
+  return await addLocationRecord({
     name,
     latitude,
     longitude,
@@ -32,11 +32,11 @@ export async function addLocation(
 }
 
 export async function getLocations() {
-  return listLocations();
+  return await listLocations();
 }
 
 export async function getActiveLocations() {
-  return listActiveLocations();
+  return await listActiveLocations();
 }
 
 export async function updateLocation(
@@ -48,17 +48,17 @@ export async function updateLocation(
     active?: boolean;
   },
 ) {
-  return updateLocationRecord(id, patch);
+  return await updateLocationRecord(id, patch);
 }
 
 export async function deactivateLocation(id: number) {
-  return updateLocationRecord(id, { active: false });
+  return await updateLocationRecord(id, { active: false });
 }
 
 export async function activateLocation(id: number) {
-  return updateLocationRecord(id, { active: true });
+  return await updateLocationRecord(id, { active: true });
 }
 
 export async function deleteLocation(id: number) {
-  return deleteLocationRecord(id);
+  return await deleteLocationRecord(id);
 }

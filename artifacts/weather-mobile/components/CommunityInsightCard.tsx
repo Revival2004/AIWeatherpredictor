@@ -5,7 +5,7 @@
  * what they reported in the last 24 hours, and whether their
  * combined feedback is boosting the prediction model.
  *
- * The card is intentionally subtle — it appears only when
+ * The card is intentionally subtle - it appears only when
  * there's real community data worth showing.
  */
 import { Feather } from "@expo/vector-icons";
@@ -13,6 +13,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import { getBaseUrl } from "@/lib/api-client";
 
 interface CommunityData {
   farmerCount: number;
@@ -37,8 +38,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
     let cancelled = false;
     setLoading(true);
 
-    const domain = process.env.EXPO_PUBLIC_DOMAIN;
-    const base = domain ? `https://${domain}` : "";
+    const base = getBaseUrl() ?? "";
     const url = `${base}/api/weather/community?lat=${lat}&lon=${lon}`;
 
     fetch(url)
@@ -101,7 +101,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
             {farmerCount} farmer{farmerCount !== 1 ? "s" : ""} in your zone
           </Text>
           <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-            Within {zoneRadiusKm} km · {feedbackCount} reports (30 days)
+            Within {zoneRadiusKm} km - {feedbackCount} reports (30 days)
           </Text>
         </View>
 
@@ -289,3 +289,4 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
 });
+

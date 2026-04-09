@@ -1,7 +1,7 @@
-import React, { useMemo } from "react";
-import { useGetWeatherStats } from "@workspace/api-client-react";
+﻿import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { LineChart, BarChart, Activity, Droplets, Thermometer, Wind, PieChart as PieChartIcon, Loader2 } from "lucide-react";
+import { LineChart, Activity, Droplets, Thermometer, Wind, PieChart as PieChartIcon, Loader2, Database } from "lucide-react";
 import { 
   BarChart as RechartsBarChart, 
   Bar, 
@@ -12,6 +12,8 @@ import {
   ResponsiveContainer,
   Cell
 } from "recharts";
+import { useAdminSession } from "@/contexts/admin-session";
+import { getAdminStats } from "@/lib/admin-api";
 
 const COLORS = [
   "hsl(var(--chart-1))",
@@ -22,7 +24,13 @@ const COLORS = [
 ];
 
 export function Stats() {
-  const { data: stats, isLoading } = useGetWeatherStats();
+  const { token } = useAdminSession();
+  const { data: stats, isLoading } = useQuery({
+    enabled: Boolean(token),
+    queryKey: ["admin-stats", token],
+    queryFn: () => getAdminStats(token ?? ""),
+  });
+  const DEGREE = "\u00B0";
 
   const chartData = useMemo(() => {
     if (!stats?.predictionBreakdown) return [];
@@ -31,7 +39,7 @@ export function Stats() {
       .map(([name, value]) => ({
         name: name.length > 20 ? name.substring(0, 20) + "..." : name,
         fullLabel: name,
-        value
+        value: Number(value)
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 8); // Top 8 predictions
@@ -61,7 +69,7 @@ export function Stats() {
           Analytics Dashboard
         </h1>
         <p className="text-muted-foreground">
-          Aggregated climate data and AI prediction distributions.
+          Aggregated climate data, model trends, and store health for the live system.
         </p>
       </div>
 
@@ -88,7 +96,7 @@ export function Stats() {
           <CardContent>
             <div className="text-4xl font-mono font-bold">
               {stats.avgTemperature !== null ? stats.avgTemperature.toFixed(1) : "--"}
-              <span className="text-xl text-muted-foreground ml-1">°C</span>
+              <span className="text-xl text-muted-foreground ml-1">{DEGREE}C</span>
             </div>
           </CardContent>
         </Card>
@@ -124,13 +132,42 @@ export function Stats() {
         </Card>
       </div>
 
+      <Card className="cockpit-panel border-none shadow-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary" />
+            Data Store Status
+          </CardTitle>
+          <CardDescription>Current persistence mode for the live backend.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Mode</div>
+            <div className="mt-2 text-lg font-semibold capitalize">{stats.store.mode}</div>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Ready</div>
+            <div className="mt-2 text-lg font-semibold">{stats.store.ready ? "Healthy" : "Needs attention"}</div>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-background/70 p-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Configured</div>
+            <div className="mt-2 text-lg font-semibold">{stats.store.configured ? "Yes" : "No"}</div>
+          </div>
+          {stats.store.error ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 sm:col-span-3">
+              {stats.store.error}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
       <Card className="cockpit-panel border-none shadow-xl mt-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <PieChartIcon className="h-5 w-5 text-primary" />
-            AI Prediction Distribution
+            Prediction Distribution
           </CardTitle>
-          <CardDescription>Frequency of common atmospheric assessments</CardDescription>
+          <CardDescription>Most common recent atmospheric assessments</CardDescription>
         </CardHeader>
         <CardContent>
           {chartData.length > 0 ? (
@@ -172,3 +209,5 @@ export function Stats() {
     </div>
   );
 }
+
+

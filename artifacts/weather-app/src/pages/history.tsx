@@ -1,14 +1,21 @@
-import React from "react";
-import { useGetWeatherHistory } from "@workspace/api-client-react";
+﻿import { useQuery } from "@tanstack/react-query";
+import { useAdminSession } from "@/contexts/admin-session";
+import { getAdminHistory } from "@/lib/admin-api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { getWeatherMeta, formatDate } from "@/lib/weather-utils";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, History as HistoryIcon, Loader2 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+
+const DEGREE = "\u00B0";
 
 export function History() {
-  const { data: history, isLoading } = useGetWeatherHistory({ limit: 50 });
+  const { token } = useAdminSession();
+  const { data: history, isLoading } = useQuery({
+    enabled: Boolean(token),
+    queryKey: ["admin-history", token],
+    queryFn: () => getAdminHistory(token ?? "", 50),
+  });
 
   return (
     <div className="container mx-auto p-6 max-w-6xl space-y-6 animate-in fade-in duration-500">
@@ -18,14 +25,14 @@ export function History() {
           History Log
         </h1>
         <p className="text-muted-foreground">
-          A chronological record of atmospheric scans and AI predictions.
+          The latest farm observations and prediction traces across the system.
         </p>
       </div>
 
       <Card className="cockpit-panel border-none shadow-xl">
         <CardHeader className="bg-muted/20 border-b border-border/50">
           <CardTitle className="text-lg">Observation Database</CardTitle>
-          <CardDescription>Last 50 recorded weather events across all locations</CardDescription>
+          <CardDescription>Last 50 recorded weather events across all tracked farms</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
@@ -72,7 +79,7 @@ export function History() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold">
-                          {record.temperature.toFixed(1)}°
+                          {record.temperature.toFixed(1)}{DEGREE}
                         </TableCell>
                         <TableCell className="hidden md:table-cell max-w-xs truncate text-sm" title={record.prediction}>
                           {record.prediction}
@@ -94,3 +101,5 @@ export function History() {
     </div>
   );
 }
+
+

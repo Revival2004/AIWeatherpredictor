@@ -69,7 +69,7 @@ export async function collectAllLocations(logger?: Logger): Promise<CollectionRe
       );
       const willRain = rainPrediction.predictionValue === "yes";
 
-      addWeatherRecord({
+      await addWeatherRecord({
         latitude: location.latitude,
         longitude: location.longitude,
         temperature: weather.temperature,
@@ -82,7 +82,7 @@ export async function collectAllLocations(logger?: Logger): Promise<CollectionRe
         reasoning: buildScheduledReasoning(rainPrediction.probability, rainPrediction.modelVersion),
       });
 
-      addPredictionRecord({
+      await addPredictionRecord({
         latitude: location.latitude,
         longitude: location.longitude,
         predictedAt: new Date(),

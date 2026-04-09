@@ -1,9 +1,9 @@
 import { Feather } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -14,60 +14,65 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useLanguage } from "@/contexts/LanguageContext";
-import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
-import MapLocationPicker from "@/components/MapLocationPicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  useGetWeatherStats,
-  useGetMetrics,
-  useGetLocations,
-  useAddLocation,
-  useDeleteLocation,
-  useActivateLocation,
-  useDeactivateLocation,
-  useTriggerCollection,
-  getGetLocationsQueryKey,
-  getGetMetricsQueryKey,
-  getGetWeatherStatsQueryKey,
-  type CollectionResponse,
-} from "@/lib/api-client";
-import { useQueryClient } from "@tanstack/react-query";
+import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
+import MapLocationPicker from "@/components/MapLocationPicker";
 import { StatsPanel } from "@/components/StatsPanel";
 import { useColors } from "@/hooks/useColors";
+import {
+  getBaseUrl,
+  getGetLocationsQueryKey,
+  getGetWeatherStatsQueryKey,
+  type TrackedLocation,
+  useActivateLocation,
+  useAddLocation,
+  useDeactivateLocation,
+  useDeleteLocation,
+  useGetLocations,
+  useGetWeatherStats,
+} from "@/lib/api-client";
 
 function getApiBase() {
-  const domain = process.env.EXPO_PUBLIC_DOMAIN;
-  return domain ? `https://${domain}` : "http://localhost:8080";
+  return getBaseUrl() ?? "http://localhost:8080";
 }
 
 export default function StatsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-
-  const { t } = useLanguage();
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [newName, setNewName] = useState("");
   const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(null);
-
-  // Crop calendar editing state
   const [editingCropId, setEditingCropId] = useState<number | null>(null);
   const [cropTypeInput, setCropTypeInput] = useState("");
   const [plantingDateInput, setPlantingDateInput] = useState("");
   const [savingCrop, setSavingCrop] = useState(false);
 
-  const { data: statsData, isLoading: statsLoading, refetch: refetchStats, isRefetching: statsRefetching } =
-    useGetWeatherStats({ query: { queryKey: getGetWeatherStatsQueryKey(), staleTime: 2 * 60 * 1000 } });
+  const {
+    data: statsData,
+    isLoading: statsLoading,
+    isRefetching: statsRefetching,
+    refetch: refetchStats,
+  } = useGetWeatherStats({
+    query: {
+      queryKey: getGetWeatherStatsQueryKey(),
+      staleTime: 2 * 60 * 1000,
+    },
+  });
 
-  const { data: metricsData, isLoading: metricsLoading, refetch: refetchMetrics } =
-    useGetMetrics({ query: { queryKey: getGetMetricsQueryKey(), staleTime: 60 * 1000 } });
-
-  const { data: locationsData, isLoading: locationsLoading, refetch: refetchLocations } =
-    useGetLocations({ query: { queryKey: getGetLocationsQueryKey(), staleTime: 30 * 1000 } });
+  const {
+    data: locationsData,
+    isLoading: locationsLoading,
+    refetch: refetchLocations,
+  } = useGetLocations({
+    query: {
+      queryKey: getGetLocationsQueryKey(),
+      staleTime: 30 * 1000,
+    },
+  });
 
   const addLocationMutation = useAddLocation({
     mutation: {
@@ -82,49 +87,51 @@ export default function StatsScreen() {
 
   const deleteLocationMutation = useDeleteLocation({
     mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() }),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+      },
     },
   });
 
   const activateMutation = useActivateLocation({
     mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() }),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+      },
     },
   });
 
   const deactivateMutation = useDeactivateLocation({
     mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() }),
-    },
-  });
-
-  const collectMutation = useTriggerCollection({
-    mutation: {
-      onSuccess: (data: CollectionResponse) => {
-        queryClient.invalidateQueries({ queryKey: getGetMetricsQueryKey() });
-        Alert.alert("Collection complete", `Collected ${data.collected} of ${data.total} locations.`);
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
       },
-      onError: () => Alert.alert("Error", "Collection failed. Check your locations."),
     },
   });
 
   function handleAddLocation() {
     if (!pickedLocation) {
-      Alert.alert("No location selected", "Please pick a location from the Kenya location browser.");
+      Alert.alert("No location selected", "Please choose a location before saving it.");
       return;
     }
-    const lat = pickedLocation.lat;
-    const lon = pickedLocation.lon;
+
     const name = newName.trim() || pickedLocation.name;
     if (!name) {
-      Alert.alert("No name", "Please enter a name for this location.");
+      Alert.alert("Missing name", "Please enter a name for this location.");
       return;
     }
-    addLocationMutation.mutate({ data: { name, latitude: lat, longitude: lon } });
+
+    addLocationMutation.mutate({
+      data: {
+        name,
+        latitude: pickedLocation.lat,
+        longitude: pickedLocation.lon,
+      },
+    });
   }
 
   function confirmDelete(id: number, name: string) {
-    Alert.alert("Remove Location", `Remove "${name}" from tracked locations?`, [
+    Alert.alert("Remove location", `Remove \"${name}\" from tracked locations?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -136,6 +143,7 @@ export default function StatsScreen() {
 
   async function saveCrop(id: number) {
     setSavingCrop(true);
+
     try {
       await fetch(`${getApiBase()}/api/locations/${id}/crop`, {
         method: "PUT",
@@ -170,17 +178,27 @@ export default function StatsScreen() {
 
   function refetchAll() {
     refetchStats();
-    refetchMetrics();
     refetchLocations();
   }
 
-  const isRefetching = statsRefetching || metricsLoading;
-
-  const predBreakdown: Record<string, number> = statsData?.predictionBreakdown ?? {};
-  const predEntries = Object.entries(predBreakdown).sort((a, b) => b[1] - a[1]);
-  const accuracy = metricsData?.predictions?.accuracy;
-  const model = metricsData?.model;
-  const locations = locationsData?.locations ?? [];
+  const isRefetching = statsRefetching || locationsLoading;
+  const predEntries = Object.entries(statsData?.predictionBreakdown ?? {}).sort((a, b) => b[1] - a[1]);
+  const locations: TrackedLocation[] = locationsData?.locations ?? [];
+  const readingCount = statsData?.totalReadings ?? 0;
+  const learningColor =
+    readingCount >= 120 ? "#3D8B37"
+    : readingCount >= 40 ? "#D4851A"
+    : colors.mutedForeground;
+  const learningHeadline =
+    readingCount >= 120 ? "Strong local learning base"
+    : readingCount >= 40 ? "Building useful local patterns"
+    : "Still collecting local history";
+  const learningSummary =
+    readingCount >= 120
+      ? "This farm network has enough recent readings to support more stable field guidance."
+      : readingCount >= 40
+      ? "FarmPal has started to recognize local weather patterns, and more readings will keep improving it."
+      : "Keep checking weather from the dashboard so the system can build stronger local memory.";
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -248,9 +266,7 @@ export default function StatsScreen() {
       gap: 6,
     },
     lastReadingText: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
-
-    // Accuracy ring
-    accuracyRow: { flexDirection: "row", alignItems: "center", gap: 16, paddingBottom: 8, borderBottomWidth: 1, borderColor: colors.border },
+    insightRow: { flexDirection: "row", alignItems: "center", gap: 16, paddingBottom: 8 },
     ringContainer: {
       width: 64,
       height: 64,
@@ -260,27 +276,9 @@ export default function StatsScreen() {
       justifyContent: "center",
     },
     ringPct: { fontSize: 15, fontFamily: "Inter_700Bold" },
-    accuracyMeta: { flex: 1, gap: 4 },
-    accuracyTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground },
-    accuracySub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
-
-    // Buttons
-    actionRow: { flexDirection: "row", gap: 10, marginHorizontal: 16, marginBottom: 4 },
-    actionBtn: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 6,
-      paddingVertical: 12,
-      borderRadius: 12,
-      backgroundColor: colors.primary,
-    },
-    actionBtnSecondary: { backgroundColor: colors.muted },
-    actionBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
-    actionBtnTextSecondary: { color: colors.foreground },
-
-    // Locations
+    insightMeta: { flex: 1, gap: 4 },
+    insightTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground },
+    insightSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
     locationItem: {
       flexDirection: "row",
       alignItems: "center",
@@ -299,8 +297,6 @@ export default function StatsScreen() {
     },
     locationBadgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
     locationActions: { flexDirection: "row", gap: 8, alignItems: "center" },
-
-    // Add location form
     addForm: {
       marginHorizontal: 16,
       backgroundColor: colors.card,
@@ -322,8 +318,6 @@ export default function StatsScreen() {
       fontFamily: "Inter_400Regular",
       color: colors.foreground,
     },
-    inputRow: { flexDirection: "row", gap: 8 },
-    inputHalf: { flex: 1 },
     addFormBtns: { flexDirection: "row", gap: 10 },
     addBtn: {
       flex: 1,
@@ -350,12 +344,6 @@ export default function StatsScreen() {
     },
   });
 
-  const accuracyColor =
-    accuracy == null ? colors.mutedForeground
-    : accuracy >= 70 ? "#3D8B37"
-    : accuracy >= 50 ? "#D4851A"
-    : "#D94F4F";
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -381,126 +369,58 @@ export default function StatsScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {statsData?.lastReading && (
+        {statsData?.lastReading ? (
           <View style={[styles.lastReadingRow, { marginTop: 12 }]}>
             <Feather name="clock" size={12} color={colors.mutedForeground} />
             <Text style={styles.lastReadingText}>
               Last reading: {new Date(statsData.lastReading).toLocaleString()}
             </Text>
           </View>
-        )}
+        ) : null}
 
-        {/* Averages */}
         <Text style={styles.sectionLabel}>AVERAGES</Text>
         <StatsPanel stats={statsData} isLoading={statsLoading} />
 
-        {/* AI Prediction breakdown */}
-        {predEntries.length > 0 && (
+        {predEntries.length > 0 ? (
           <>
-            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>AI PREDICTIONS</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>RECENT OUTLOOKS</Text>
             <View style={styles.card}>
               {predEntries.map(([pred, count], idx) => (
-                <View
-                  key={pred}
-                  style={idx === predEntries.length - 1 ? styles.rowLast : styles.row}
-                >
+                <View key={pred} style={idx === predEntries.length - 1 ? styles.rowLast : styles.row}>
                   <Text style={styles.label}>{pred}</Text>
                   <Text style={styles.value}>{count}</Text>
                 </View>
               ))}
             </View>
           </>
-        )}
+        ) : null}
 
-        {/* ML Accuracy */}
-        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>ML ACCURACY</Text>
+        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>FIELD INTELLIGENCE</Text>
         <View style={styles.card}>
-          <View style={styles.accuracyRow}>
-            <View style={[styles.ringContainer, { borderColor: accuracyColor }]}>
-              <Text style={[styles.ringPct, { color: accuracyColor }]}>
-                {accuracy != null ? `${accuracy}%` : "–"}
-              </Text>
+          <View style={styles.insightRow}>
+            <View style={[styles.ringContainer, { borderColor: learningColor }]}>
+              <Text style={[styles.ringPct, { color: learningColor }]}>{readingCount}</Text>
             </View>
-            <View style={styles.accuracyMeta}>
-              <Text style={styles.accuracyTitle}>
-                {accuracy != null ? "Prediction Accuracy" : "No feedback yet"}
+            <View style={styles.insightMeta}>
+              <Text style={styles.insightTitle}>{learningHeadline}</Text>
+              <Text style={styles.insightSub}>
+                {locations.length} tracked {locations.length === 1 ? "farm" : "farms"} and {readingCount} stored readings.
               </Text>
-              <Text style={styles.accuracySub}>
-                {metricsData?.predictions?.resolved ?? 0} resolved · {metricsData?.predictions?.total ?? 0} total
-              </Text>
-              {metricsData?.observations != null && (
-                <Text style={styles.accuracySub}>
-                  {metricsData.observations} observations in DB
-                </Text>
-              )}
+              <Text style={styles.insightSub}>{learningSummary}</Text>
             </View>
           </View>
-
-          {model ? (
-            <>
-              <View style={styles.row}>
-                <Text style={styles.label}>Training samples</Text>
-                <Text style={styles.value}>{model.trainingSamples}</Text>
-              </View>
-              {/* Per-model accuracy bars */}
-              <View style={{ paddingTop: 12 }}>
-                <Text style={[styles.mutedValue, { marginBottom: 10, fontSize: 11, letterSpacing: 0.8 }]}>
-                  MODEL COMPARISON
-                </Text>
-                {[
-                  { name: "Logistic Regression", key: "lr", pct: model.lrAccuracy, color: "#4A90D9" },
-                  { name: "Random Forest", key: "rf", pct: model.rfAccuracy, color: "#3D8B37" },
-                  { name: "Gradient Boosting", key: "gb", pct: model.gbAccuracy, color: "#D4851A" },
-                  { name: "🏆 Ensemble Vote", key: "ens", pct: model.accuracy, color: "#8B2FC9" },
-                ].map((m, idx, arr) => (
-                  <View key={m.key} style={{ marginBottom: idx === arr.length - 1 ? 0 : 10 }}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
-                      <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: colors.foreground }}>
-                        {m.name}
-                      </Text>
-                      <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: m.color }}>
-                        {m.pct != null ? `${m.pct}%` : "–"}
-                      </Text>
-                    </View>
-                    <View style={{ height: 6, backgroundColor: colors.muted, borderRadius: 3, overflow: "hidden" }}>
-                      <View
-                        style={{
-                          height: 6,
-                          borderRadius: 3,
-                          backgroundColor: m.color,
-                          width: `${Math.min(100, m.pct ?? 0)}%`,
-                        }}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </>
-          ) : (
-            <View style={{ paddingTop: 12 }}>
-              <Text style={styles.emptyText}>Model trains automatically each month as weather data is collected.</Text>
-            </View>
-          )}
+          <View style={styles.row}>
+            <Text style={styles.label}>Latest reading</Text>
+            <Text style={styles.mutedValue}>
+              {statsData?.lastReading ? new Date(statsData.lastReading).toLocaleDateString() : "Not yet available"}
+            </Text>
+          </View>
+          <View style={styles.rowLast}>
+            <Text style={styles.label}>Prediction note types tracked</Text>
+            <Text style={styles.value}>{predEntries.length}</Text>
+          </View>
         </View>
 
-        {/* Action buttons */}
-        <View style={[styles.actionRow, { marginTop: 20 }]}>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => collectMutation.mutate()}
-            disabled={collectMutation.isPending || locations.length === 0}
-            activeOpacity={0.8}
-          >
-            {collectMutation.isPending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Feather name="cloud-rain" size={14} color="#fff" />
-            )}
-            <Text style={styles.actionBtnText}>Collect Now</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Tracked Locations */}
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 24, marginBottom: 10 }}>
           <Text style={[styles.sectionLabel, { marginBottom: 0, flex: 1 }]}>TRACKED LOCATIONS</Text>
           <TouchableOpacity
@@ -514,19 +434,21 @@ export default function StatsScreen() {
           </TouchableOpacity>
         </View>
 
-        {showAddLocation && (
+        {showAddLocation ? (
           <View style={[styles.addForm, { marginBottom: 12 }]}>
             <Text style={styles.addFormTitle}>Add tracked location</Text>
 
-            {/* Location selection — two methods */}
             {pickedLocation ? (
               <TouchableOpacity
-                style={[styles.input, {
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  paddingHorizontal: 12,
-                }]}
+                style={[
+                  styles.input,
+                  {
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 12,
+                  },
+                ]}
                 onPress={() => setShowLocationPicker(true)}
               >
                 <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.foreground }}>
@@ -542,7 +464,7 @@ export default function StatsScreen() {
                 >
                   <Feather name="list" size={14} color={colors.primary} />
                   <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.primary }}>
-                    Browse by County
+                    Browse by county
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -551,13 +473,12 @@ export default function StatsScreen() {
                 >
                   <Feather name="map" size={14} color={colors.primary} />
                   <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.primary }}>
-                    Pin on Map
+                    Pin on map
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            {/* Optional custom name */}
             <TextInput
               style={styles.input}
               placeholder={pickedLocation ? `Custom name (default: ${pickedLocation.town})` : "Custom name (optional)"}
@@ -566,15 +487,16 @@ export default function StatsScreen() {
               onChangeText={setNewName}
             />
 
-            {/* Show coordinates once picked */}
-            {pickedLocation && (
-              <View style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-                marginBottom: 8,
-                paddingHorizontal: 4,
-              }}>
+            {pickedLocation ? (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                  paddingHorizontal: 4,
+                }}
+              >
                 <Feather name="crosshair" size={12} color={colors.mutedForeground} />
                 <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
                   {pickedLocation.lat.toFixed(4)}, {pickedLocation.lon.toFixed(4)}
@@ -585,7 +507,7 @@ export default function StatsScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            )}
+            ) : null}
 
             <View style={styles.addFormBtns}>
               <TouchableOpacity
@@ -596,21 +518,23 @@ export default function StatsScreen() {
                 {addLocationMutation.isPending ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.addBtnText}>Add Location</Text>
+                  <Text style={styles.addBtnText}>Add location</Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => {
-                setShowAddLocation(false);
-                setPickedLocation(null);
-                setNewName("");
-              }}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => {
+                  setShowAddLocation(false);
+                  setPickedLocation(null);
+                  setNewName("");
+                }}
+              >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
-        )}
+        ) : null}
 
-        {/* Kenya Location Picker Modal (browse by county) */}
         <KenyaLocationPicker
           visible={showLocationPicker}
           onClose={() => setShowLocationPicker(false)}
@@ -620,7 +544,6 @@ export default function StatsScreen() {
           }}
         />
 
-        {/* Map Location Picker Modal (tap-to-pin) */}
         <MapLocationPicker
           visible={showMapPicker}
           onClose={() => setShowMapPicker(false)}
@@ -643,22 +566,22 @@ export default function StatsScreen() {
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
           ) : locations.length === 0 ? (
             <Text style={styles.emptyText}>
-              No tracked locations yet. Add one above to enable automatic hourly collection.
+              No tracked locations yet. Add one above to enable local weather tracking.
             </Text>
           ) : (
-            (locations as any[]).map((loc, idx) => {
+            locations.map((loc, idx) => {
               const isLast = idx === locations.length - 1;
               const days = daysInSeason(loc.plantingDate ?? null);
               const isEditing = editingCropId === loc.id;
+
               return (
                 <View key={loc.id} style={isLast ? styles.locationItemLast : styles.locationItem}>
-                  {/* Top row: name + actions */}
                   <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.locationName}>{loc.name}</Text>
                       <Text style={styles.locationCoords}>
                         {loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}
-                        {loc.elevation != null ? `  ·  ${Math.round(loc.elevation)}m` : ""}
+                        {loc.elevation != null ? `  -  ${Math.round(loc.elevation)}m` : ""}
                       </Text>
                     </View>
                     <View style={styles.locationActions}>
@@ -696,7 +619,6 @@ export default function StatsScreen() {
                     </View>
                   </View>
 
-                  {/* Crop calendar row */}
                   {!isEditing ? (
                     <TouchableOpacity
                       onPress={() => startEditCrop({ id: loc.id, cropType: loc.cropType ?? null, plantingDate: loc.plantingDate ?? null })}
@@ -716,21 +638,21 @@ export default function StatsScreen() {
                           <>
                             <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
                               {loc.cropType}
-                              {days != null && (
+                              {days != null ? (
                                 <Text style={{ color: "#3D8B37", fontFamily: "Inter_700Bold" }}>
-                                  {" "}· Day {days} of season
+                                  {" "} - Day {days} of season
                                 </Text>
-                              )}
+                              ) : null}
                             </Text>
-                            {loc.plantingDate && (
+                            {loc.plantingDate ? (
                               <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
                                 Planted {new Date(loc.plantingDate).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
                               </Text>
-                            )}
+                            ) : null}
                           </>
                         ) : (
                           <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-                            Tap to set crop & planting date
+                            Tap to set crop and planting date
                           </Text>
                         )}
                       </View>
@@ -741,7 +663,6 @@ export default function StatsScreen() {
                       <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, marginBottom: 8, letterSpacing: 0.6 }}>
                         CROP CALENDAR
                       </Text>
-                      {/* Crop type quick-pick */}
                       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                         {["Maize", "Tea", "Coffee", "Beans", "Potatoes", "Wheat", "Vegetables", "Pyrethrum"].map((crop) => (
                           <TouchableOpacity
@@ -756,25 +677,25 @@ export default function StatsScreen() {
                               backgroundColor: cropTypeInput === crop ? `${colors.primary}18` : colors.background,
                             }}
                           >
-                            <Text style={{
-                              fontSize: 11,
-                              fontFamily: "Inter_500Medium",
-                              color: cropTypeInput === crop ? colors.primary : colors.foreground,
-                            }}>
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontFamily: "Inter_500Medium",
+                                color: cropTypeInput === crop ? colors.primary : colors.foreground,
+                              }}
+                            >
                               {crop}
                             </Text>
                           </TouchableOpacity>
                         ))}
                       </View>
-                      {/* Custom crop name */}
                       <TextInput
                         style={[styles.input, { marginBottom: 8, fontSize: 13 }]}
-                        placeholder="Custom crop name…"
+                        placeholder="Custom crop name..."
                         placeholderTextColor={colors.mutedForeground}
                         value={cropTypeInput}
                         onChangeText={setCropTypeInput}
                       />
-                      {/* Planting date */}
                       <TextInput
                         style={[styles.input, { marginBottom: 10, fontSize: 13 }]}
                         placeholder="Planting date (YYYY-MM-DD)"
@@ -784,21 +705,14 @@ export default function StatsScreen() {
                         keyboardType="numeric"
                       />
                       <View style={{ flexDirection: "row", gap: 8 }}>
-                        <TouchableOpacity
-                          style={[styles.addBtn, { flex: 1 }]}
-                          onPress={() => saveCrop(loc.id)}
-                          disabled={savingCrop}
-                        >
+                        <TouchableOpacity style={[styles.addBtn, { flex: 1 }]} onPress={() => saveCrop(loc.id)} disabled={savingCrop}>
                           {savingCrop ? (
                             <ActivityIndicator size="small" color="#fff" />
                           ) : (
-                            <Text style={styles.addBtnText}>Save Crop</Text>
+                            <Text style={styles.addBtnText}>Save crop</Text>
                           )}
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.cancelBtn, { flex: 1 }]}
-                          onPress={() => setEditingCropId(null)}
-                        >
+                        <TouchableOpacity style={[styles.cancelBtn, { flex: 1 }]} onPress={() => setEditingCropId(null)}>
                           <Text style={styles.cancelBtnText}>Cancel</Text>
                         </TouchableOpacity>
                       </View>
@@ -809,7 +723,6 @@ export default function StatsScreen() {
             })
           )}
         </View>
-
       </ScrollView>
     </View>
   );

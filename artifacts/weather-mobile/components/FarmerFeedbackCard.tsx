@@ -5,6 +5,7 @@ import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-nati
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getBaseUrl } from "@/lib/api-client";
 
 export const FEEDBACK_PENDING_KEY = "microclimate_feedback_pending_v1";
 
@@ -24,8 +25,7 @@ type Answer = "yes" | "almost" | "no";
 type Step = "rain" | "cloudy" | "done";
 
 function getApiBase() {
-  const domain = process.env.EXPO_PUBLIC_DOMAIN;
-  return domain ? `https://${domain}` : "http://localhost:8080";
+  return getBaseUrl() ?? "http://localhost:8080";
 }
 
 export default function FarmerFeedbackCard({ pending, onDismiss }: Props) {
