@@ -3,11 +3,10 @@ import { z } from "zod";
 import { generateAlerts } from "../lib/alertsService.js";
 import { fetchForecast } from "../lib/forecastService.js";
 import {
-  getMockWeatherPrediction,
   loadModel,
   predictRain,
   trainModel,
-} from "../lib/mockMlService.js";
+} from "../lib/mlService.js";
 import { collectAllLocations } from "../lib/schedulerRuntime.js";
 import {
   addFeedbackRecord,
@@ -22,6 +21,9 @@ import {
 import { fetchWeather } from "../lib/weatherService.js";
 
 const router: IRouter = Router();
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5001";
+const ML_MODE = process.env.ML_SERVICE_URL ? "remote-python" : "fallback";
+const RAIN_CODES = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
 
 const weatherQuerySchema = z.object({
   lat: z.coerce.number(),
@@ -77,6 +79,65 @@ function getNearbyRecords<T extends { latitude: number; longitude: number }>(
   ));
 }
 
+function toPercent(value: number | undefined): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (value <= 1) {
+    return Number((value * 100).toFixed(1));
+  }
+
+  return Number(value.toFixed(1));
+}
+
+function buildPredictionLabel(predictionValue: "yes" | "no"): string {
+  return predictionValue === "yes" ? "Rain expected" : "No rain expected";
+}
+
+function buildPredictionReasoning(
+  weather: Awaited<ReturnType<typeof fetchWeather>>,
+  probability: number,
+): string {
+  const chance = Math.round(probability * 100);
+  const notes = [`The Python ML model estimates a ${chance}% chance of rain in the next 2 hours.`];
+
+  if (RAIN_CODES.has(weather.weathercode)) {
+    notes.push("Current conditions already show active rain signals.");
+  } else if (weather.humidity >= 80) {
+    notes.push("Humidity is elevated, which supports rainfall development.");
+  } else if (weather.pressure <= 1005) {
+    notes.push("Pressure is relatively low, which can support unstable weather.");
+  } else {
+    notes.push("Current conditions look fairly stable at the moment.");
+  }
+
+  return notes.join(" ");
+}
+
+function buildFarmingAdvice(
+  weather: Awaited<ReturnType<typeof fetchWeather>>,
+  predictionValue: "yes" | "no",
+  probability: number,
+): string {
+  if (predictionValue === "yes") {
+    if (probability >= 0.7) {
+      return "Rain looks likely soon. Delay spraying, protect inputs, and prepare for wet field conditions.";
+    }
+    return "A rain window is possible soon. Be cautious with spraying and avoid leaving inputs exposed.";
+  }
+
+  if (weather.temperature >= 30) {
+    return "Conditions look mostly dry. Irrigate early and watch crops for heat stress.";
+  }
+
+  if (weather.humidity >= 80) {
+    return "Rain is not the most likely outcome right now, but humidity is high. Monitor crops for disease pressure.";
+  }
+
+  return "Conditions look stable for routine farm work.";
+}
+
 router.get("/weather", async (req, res): Promise<void> => {
   const parsed = weatherQuerySchema.safeParse(req.query);
   if (!parsed.success) {
@@ -115,20 +176,20 @@ router.get("/weather", async (req, res): Promise<void> => {
     weather.pressure = localPressure * 0.8 + weather.pressure * 0.2;
   }
 
-  const mockPrediction = getMockWeatherPrediction({
-    temperature: weather.temperature,
-    humidity: weather.humidity,
-    pressure: weather.pressure,
-    weathercode: weather.weathercode,
-  });
-
   const rainPrediction = await predictRain(
     weather.temperature,
     weather.humidity,
     weather.pressure,
     weather.windspeed,
     weather.weathercode,
+    new Date(weather.time),
+    lat,
+    lon,
+    weather.elevation,
   );
+  const predictionLabel = buildPredictionLabel(rainPrediction.predictionValue);
+  const reasoning = buildPredictionReasoning(weather, rainPrediction.probability);
+  const advice = buildFarmingAdvice(weather, rainPrediction.predictionValue, rainPrediction.probability);
 
   const nearbyHistory = listWeatherRecords({ lat, lon, radiusDegrees: 2.7, limit: 100 });
   const record = addWeatherRecord({
@@ -139,9 +200,9 @@ router.get("/weather", async (req, res): Promise<void> => {
     humidity: weather.humidity,
     pressure: weather.pressure,
     weathercode: weather.weathercode,
-    prediction: mockPrediction.rain ? "Rain expected" : "No rain expected",
+    prediction: predictionLabel,
     confidence: rainPrediction.confidence,
-    reasoning: mockPrediction.advice,
+    reasoning,
   });
 
   res.json({
@@ -156,13 +217,16 @@ router.get("/weather", async (req, res): Promise<void> => {
     prediction: {
       prediction: record.prediction,
       confidence: rainPrediction.confidence,
-      reasoning: mockPrediction.advice,
+      reasoning,
+      advice,
+      probability: rainPrediction.probability,
       dataPoints: nearbyHistory.length,
       modelVersion: rainPrediction.modelVersion,
+      modelUsed: rainPrediction.modelUsed,
     },
     location: { lat, lon },
     recordId: record.id,
-    mlMode: "mocked",
+    mlMode: ML_MODE,
     source,
   });
 });
@@ -258,15 +322,17 @@ router.get("/metrics", async (_req, res): Promise<void> => {
       correct,
       accuracy,
     },
-    model: {
-      version: model.version,
-      trainedAt: model.trainedAt,
-      trainingSamples: model.trainingSamples,
-      accuracy: model.accuracy,
-      lrAccuracy: model.lrAccuracy,
-      rfAccuracy: model.rfAccuracy,
-      gbAccuracy: model.gbAccuracy,
-    },
+    model: model
+      ? {
+          version: model.version,
+          trainedAt: model.trainedAt,
+          trainingSamples: model.trainingSamples,
+          accuracy: toPercent(model.accuracy) ?? 0,
+          lrAccuracy: toPercent(model.lrAccuracy),
+          rfAccuracy: toPercent(model.rfAccuracy),
+          gbAccuracy: toPercent(model.gbAccuracy),
+        }
+      : null,
     observations: listWeatherRecords().length,
   });
 });
@@ -274,19 +340,43 @@ router.get("/metrics", async (_req, res): Promise<void> => {
 router.post("/train", async (req, res): Promise<void> => {
   try {
     const result = await trainModel(req.log);
-    res.json(result);
+    res.json({
+      ...result,
+      accuracy: toPercent(result.accuracy) ?? 0,
+      lrAccuracy: toPercent(result.lrAccuracy) ?? 0,
+      rfAccuracy: toPercent(result.rfAccuracy) ?? 0,
+      gbAccuracy: toPercent(result.gbAccuracy) ?? 0,
+    });
   } catch (error) {
-    req.log?.error({ err: error }, "Mock training failed");
+    req.log?.error({ err: error }, "Model training failed");
     res.status(500).json({ error: "Model training failed." });
   }
 });
 
-router.post("/bootstrap", async (_req, res): Promise<void> => {
-  res.json({
-    status: "disabled",
-    message: "Python ML bootstrap is disabled for this Render deployment.",
-    mlMode: "mocked",
-  });
+router.post("/bootstrap", async (req, res): Promise<void> => {
+  try {
+    const body = req.body && Object.keys(req.body).length ? req.body : {};
+    const response = await fetch(`${ML_SERVICE_URL}/bootstrap`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5 * 60 * 1000),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      res.status(response.status).json(data);
+      return;
+    }
+
+    res.json({
+      ...data,
+      mlMode: ML_MODE,
+    });
+  } catch (error) {
+    req.log?.error({ err: error }, "Bootstrap failed");
+    res.status(500).json({ error: "Bootstrap failed. Check ML service and network access." });
+  }
 });
 
 router.get("/weather/rain", async (req, res): Promise<void> => {
@@ -304,7 +394,12 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
       weather.pressure,
       weather.windspeed,
       weather.weathercode,
+      new Date(weather.time),
+      parsed.data.lat,
+      parsed.data.lon,
+      weather.elevation,
     );
+    const advice = buildFarmingAdvice(weather, prediction.predictionValue, prediction.probability);
 
     const targetTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
     addPredictionRecord({
@@ -336,10 +431,11 @@ router.get("/weather/rain", async (req, res): Promise<void> => {
         windspeed: weather.windspeed,
         weathercode: weather.weathercode,
       },
-      temperature: prediction.mock.temperature,
-      rain: prediction.mock.rain,
-      advice: prediction.mock.advice,
+      temperature: Math.round(weather.temperature),
+      rain: prediction.predictionValue === "yes",
+      advice,
       model_used: prediction.modelUsed,
+      mlMode: ML_MODE,
     });
   } catch (error) {
     req.log?.error({ err: error }, "Failed to build rain prediction");
@@ -365,7 +461,7 @@ router.post("/feedback", async (req, res): Promise<void> => {
   res.json({
     success: true,
     autoRetrained: false,
-    mlMode: "mocked",
+    mlMode: ML_MODE,
   });
 });
 

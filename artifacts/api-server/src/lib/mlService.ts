@@ -23,7 +23,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** JSON sidecar written by Python after each /train completion. */
 const META_PATH = path.join(__dirname, "../../ml_model_meta.json");
 
-const ML_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5000";
+const ML_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5001";
 
 const RAIN_CODES = new Set([51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99]);
 
@@ -65,6 +65,9 @@ export interface TrainResult {
   mae?:            number;
   auc?:            number;
   brierScore?:     number;
+  lrAccuracy?:     number;
+  rfAccuracy?:     number;
+  gbAccuracy?:     number;
   perModel?:       Record<string, { accuracy?: number; auc?: number; rmse?: number; mae?: number }>;
   message:         string;
   version?:        string;
@@ -87,6 +90,46 @@ function saveMetadata(meta: EnsembleModel): void {
   } catch (err) {
     console.warn("[mlService] Could not write model metadata:", err);
   }
+}
+
+function getAccuracyBreakdown(
+  perModel?: Record<string, { accuracy?: number; auc?: number; brier?: number; rmse?: number; mae?: number }>,
+): Pick<EnsembleModel, "lrAccuracy" | "rfAccuracy" | "gbAccuracy"> {
+  return {
+    lrAccuracy: perModel?.["linear_regression"]?.accuracy ?? perModel?.["lr"]?.accuracy,
+    rfAccuracy: perModel?.["random_forest"]?.accuracy ?? perModel?.["rf"]?.accuracy,
+    gbAccuracy: perModel?.["xgboost"]?.accuracy ?? perModel?.["gb"]?.accuracy ?? perModel?.["hgb"]?.accuracy,
+  };
+}
+
+function normalizeModelProbabilities(probabilities?: Record<string, number>): Record<string, number> | undefined {
+  if (!probabilities) {
+    return undefined;
+  }
+
+  const normalized: Record<string, number> = {};
+
+  for (const [key, value] of Object.entries(probabilities)) {
+    if (key === "linear_regression") {
+      normalized.lr = value;
+      continue;
+    }
+    if (key === "random_forest") {
+      normalized.rf = value;
+      continue;
+    }
+    if (key === "xgboost" || key === "gradient_boosting" || key === "hist_gradient_boosting") {
+      normalized.gb = value;
+      continue;
+    }
+    if (key === "weighted_ensemble") {
+      normalized.ensemble = value;
+      continue;
+    }
+    normalized[key] = value;
+  }
+
+  return normalized;
 }
 
 // ── Training ──────────────────────────────────────────────────────────────────
@@ -153,6 +196,8 @@ export async function trainModel(logger?: Logger): Promise<TrainResult> {
             return { trainingSamples: 0, accuracy: 0, message: r.error };
           }
 
+          const breakdown = getAccuracyBreakdown(r.perModel);
+
           const result: TrainResult = {
             trainingSamples: r.trainingSamples ?? 0,
             accuracy:        r.accuracy        ?? 0,
@@ -160,6 +205,9 @@ export async function trainModel(logger?: Logger): Promise<TrainResult> {
             mae:             r.mae,
             auc:             r.auc,
             brierScore:      r.brierScore,
+            lrAccuracy:      breakdown.lrAccuracy,
+            rfAccuracy:      breakdown.rfAccuracy,
+            gbAccuracy:      breakdown.gbAccuracy,
             perModel:        r.perModel,
             version:         r.version,
             message:         r.message ?? "Training complete",
@@ -167,9 +215,6 @@ export async function trainModel(logger?: Logger): Promise<TrainResult> {
 
           // Persist full metadata
           if (result.trainingSamples > 0) {
-            const lrAcc  = r.perModel?.["lr"]?.accuracy;
-            const rfAcc  = r.perModel?.["rf"]?.accuracy;
-            const gbAcc  = r.perModel?.["hgb"]?.accuracy ?? r.perModel?.["gb"]?.accuracy;
             saveMetadata({
               version:         r.version ?? "v4",
               trainedAt:       new Date().toISOString(),
@@ -179,9 +224,9 @@ export async function trainModel(logger?: Logger): Promise<TrainResult> {
               mae:             result.mae,
               auc:             result.auc,
               brierScore:      result.brierScore,
-              lrAccuracy:      lrAcc,
-              rfAccuracy:      rfAcc,
-              gbAccuracy:      gbAcc,
+              lrAccuracy:      breakdown.lrAccuracy,
+              rfAccuracy:      breakdown.rfAccuracy,
+              gbAccuracy:      breakdown.gbAccuracy,
               perModel:        r.perModel,
             });
           }
@@ -274,6 +319,7 @@ export async function predictRain(
 
     const prob       = data.probability;
     const confidence = +(Math.min(0.98, 0.5 + Math.abs(prob - 0.5) * 0.96)).toFixed(2);
+    const breakdown  = getAccuracyBreakdown(data.perModel);
 
     // Sync metadata sidecar if the response carries fresh training info
     if (data.trainedAt && data.trainingSamples && data.trainingSamples > 0) {
@@ -287,9 +333,9 @@ export async function predictRain(
         auc:             data.auc,
         brierScore:      data.brierScore,
         perModel:        data.perModel,
-        lrAccuracy:      data.perModel?.["lr"]?.accuracy,
-        rfAccuracy:      data.perModel?.["rf"]?.accuracy,
-        gbAccuracy:      data.perModel?.["hgb"]?.accuracy ?? data.perModel?.["gb"]?.accuracy,
+        lrAccuracy:      breakdown.lrAccuracy,
+        rfAccuracy:      breakdown.rfAccuracy,
+        gbAccuracy:      breakdown.gbAccuracy,
       });
     }
 
@@ -297,11 +343,11 @@ export async function predictRain(
       predictionValue:    prob >= 0.5 ? "yes" : "no",
       confidence,
       probability:        +prob.toFixed(4),
-      modelVersion:       `v4_${data.version ?? "ensemble"}`,
+      modelVersion:       `sklearn_${data.version ?? "ensemble"}`,
       modelUsed:          data.model_used ?? data.modelUsed,
       confidenceInterval: data.confidenceInterval,
       modelAgreement:     data.modelAgreement,
-      modelProbabilities: data.modelProbabilities,
+      modelProbabilities: normalizeModelProbabilities(data.modelProbabilities),
     };
 
   } catch {

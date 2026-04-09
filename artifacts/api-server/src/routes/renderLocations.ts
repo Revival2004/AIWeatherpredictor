@@ -10,6 +10,8 @@ import {
 } from "../lib/locationService.js";
 
 const router: IRouter = Router();
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:5001";
+const ML_MODE = process.env.ML_SERVICE_URL ? "remote-python" : "fallback";
 
 const addLocationBodySchema = z.object({
   name: z.string().min(1).max(100),
@@ -37,6 +39,15 @@ async function fetchElevation(lat: number, lon: number): Promise<number | null> 
   }
 }
 
+function triggerLocationBootstrap(lat: number, lon: number, name: string): void {
+  fetch(`${ML_SERVICE_URL}/bootstrap_location`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lat, lon, name, months_back: 24 }),
+    signal: AbortSignal.timeout(5_000),
+  }).catch(() => {});
+}
+
 router.get("/locations", async (_req, res): Promise<void> => {
   const locations = await getLocations();
   res.json({ locations });
@@ -52,12 +63,13 @@ router.post("/locations", async (req, res): Promise<void> => {
   const { name, latitude, longitude } = parsed.data;
   const elevation = await fetchElevation(latitude, longitude);
   const location = await addLocation(name, latitude, longitude, { elevation });
+  triggerLocationBootstrap(latitude, longitude, name);
 
   res.status(201).json({
     location,
     elevation,
-    bootstrapTriggered: false,
-    mlMode: "mocked",
+    bootstrapTriggered: true,
+    mlMode: ML_MODE,
   });
 });
 

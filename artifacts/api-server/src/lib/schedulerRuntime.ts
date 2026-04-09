@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import type { Logger } from "pino";
 import { getActiveLocations } from "./locationService.js";
-import { predictRain } from "./mockMlService.js";
+import { predictRain } from "./mlService.js";
 import { addPredictionRecord, addWeatherRecord } from "./store.js";
 import { fetchWeather } from "./weatherService.js";
 
@@ -13,6 +13,11 @@ export interface CollectionResult {
   lon: number;
   success: boolean;
   error?: string;
+}
+
+function buildScheduledReasoning(probability: number, modelVersion: string): string {
+  const chance = Math.round(probability * 100);
+  return `Scheduled Python ML prediction estimated a ${chance}% rain chance using ${modelVersion}.`;
 }
 
 export function startScheduler(logger: Logger): void {
@@ -57,7 +62,12 @@ export async function collectAllLocations(logger?: Logger): Promise<CollectionRe
         weather.pressure,
         weather.windspeed,
         weather.weathercode,
+        new Date(weather.time),
+        location.latitude,
+        location.longitude,
+        location.elevation ?? weather.elevation,
       );
+      const willRain = rainPrediction.predictionValue === "yes";
 
       addWeatherRecord({
         latitude: location.latitude,
@@ -67,9 +77,9 @@ export async function collectAllLocations(logger?: Logger): Promise<CollectionRe
         humidity: weather.humidity,
         pressure: weather.pressure,
         weathercode: weather.weathercode,
-        prediction: rainPrediction.mock.rain ? "Rain expected" : "No rain expected",
+        prediction: willRain ? "Rain expected" : "No rain expected",
         confidence: rainPrediction.confidence,
-        reasoning: rainPrediction.mock.advice,
+        reasoning: buildScheduledReasoning(rainPrediction.probability, rainPrediction.modelVersion),
       });
 
       addPredictionRecord({
