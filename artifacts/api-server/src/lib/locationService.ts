@@ -19,6 +19,7 @@ export async function addLocation(
     elevation?: number | null;
     cropType?: string | null;
     plantingDate?: string | null;
+    villageName?: string | null;
   },
 ) {
   return await addLocationRecord({
@@ -29,6 +30,7 @@ export async function addLocation(
     elevation: options?.elevation ?? null,
     cropType: options?.cropType ?? null,
     plantingDate: options?.plantingDate ?? null,
+    villageName: options?.villageName ?? null,
     active: true,
   });
 }
@@ -48,6 +50,7 @@ export async function updateLocation(
     elevation?: number | null;
     cropType?: string | null;
     plantingDate?: string | null;
+    villageName?: string | null;
     active?: boolean;
   },
 ) {

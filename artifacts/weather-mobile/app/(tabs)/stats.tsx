@@ -20,6 +20,7 @@ import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLoca
 import MapLocationPicker from "@/components/MapLocationPicker";
 import { StatsPanel } from "@/components/StatsPanel";
 import { useFarmerSession } from "@/contexts/FarmerSessionContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useColors } from "@/hooks/useColors";
 import {
   getGetLocationsQueryKey,
@@ -39,15 +40,45 @@ export default function StatsScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { farmer, logout } = useFarmerSession();
+  const { t, tf, language } = useLanguage();
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newVillageName, setNewVillageName] = useState("");
   const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(null);
   const [editingCropId, setEditingCropId] = useState<number | null>(null);
   const [cropTypeInput, setCropTypeInput] = useState("");
   const [plantingDateInput, setPlantingDateInput] = useState("");
+  const [villageInput, setVillageInput] = useState("");
   const [savingCrop, setSavingCrop] = useState(false);
+  const villageCopy = {
+    en: {
+      villageLabel: "Village name",
+      villagePlaceholder: "Village name (optional)",
+      villageMissing: "Village name not set",
+    },
+    sw: {
+      villageLabel: "Jina la kijiji",
+      villagePlaceholder: "Jina la kijiji (hiari)",
+      villageMissing: "Jina la kijiji halijawekwa",
+    },
+    ki: {
+      villageLabel: "Village name",
+      villagePlaceholder: "Village name (optional)",
+      villageMissing: "Village name not set",
+    },
+  } as const;
+  const cropChipCopy = {
+    Maize: { en: "Maize", sw: "Mahindi", ki: "Mahindi" },
+    Tea: { en: "Tea", sw: "Chai", ki: "Chai" },
+    Coffee: { en: "Coffee", sw: "Kahawa", ki: "Kahawa" },
+    Beans: { en: "Beans", sw: "Maharagwe", ki: "Maharagwe" },
+    Potatoes: { en: "Potatoes", sw: "Viazi", ki: "Viazi" },
+    Wheat: { en: "Wheat", sw: "Ngano", ki: "Ngano" },
+    Vegetables: { en: "Vegetables", sw: "Mboga", ki: "Mboga" },
+    Pyrethrum: { en: "Pyrethrum", sw: "Pareto", ki: "Pareto" },
+  } as const;
 
   const {
     data: statsData,
@@ -78,6 +109,7 @@ export default function StatsScreen() {
         queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
         setShowAddLocation(false);
         setNewName("");
+        setNewVillageName("");
         setPickedLocation(null);
       },
     },
@@ -109,19 +141,20 @@ export default function StatsScreen() {
 
   function handleAddLocation() {
     if (!pickedLocation) {
-      Alert.alert("No location selected", "Please choose a location before saving it.");
+      Alert.alert(t("statsNoLocationSelected"), t("statsChooseLocationBeforeSaving"));
       return;
     }
 
     const name = newName.trim() || pickedLocation.name;
     if (!name) {
-      Alert.alert("Missing name", "Please enter a name for this location.");
+      Alert.alert(t("statsMissingNameTitle"), t("statsEnterLocationName"));
       return;
     }
 
     addLocationMutation.mutate({
       data: {
         name,
+        villageName: newVillageName.trim() || undefined,
         latitude: pickedLocation.lat,
         longitude: pickedLocation.lon,
       },
@@ -129,10 +162,10 @@ export default function StatsScreen() {
   }
 
   function confirmDelete(id: number, name: string) {
-    Alert.alert("Remove location", `Remove \"${name}\" from tracked locations?`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("statsRemoveLocationTitle"), tf("statsRemoveLocationBody", { name }), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Remove",
+        text: t("statsRemoveLocationTitle"),
         style: "destructive",
         onPress: () => deleteLocationMutation.mutate({ id }),
       },
@@ -149,22 +182,29 @@ export default function StatsScreen() {
         body: JSON.stringify({
           cropType: cropTypeInput || undefined,
           plantingDate: plantingDateInput || undefined,
+          villageName: villageInput || undefined,
         }),
         responseType: "json",
       });
       queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
       setEditingCropId(null);
     } catch {
-      Alert.alert("Error", "Could not save crop info.");
+      Alert.alert(t("statsCropSaveErrorTitle"), t("statsCropSaveErrorBody"));
     } finally {
       setSavingCrop(false);
     }
   }
 
-  function startEditCrop(loc: { id: number; cropType: string | null; plantingDate: string | null }) {
+  function startEditCrop(loc: {
+    id: number;
+    cropType: string | null;
+    plantingDate: string | null;
+    villageName?: string | null;
+  }) {
     setEditingCropId(loc.id);
     setCropTypeInput(loc.cropType ?? "");
     setPlantingDateInput(loc.plantingDate ?? "");
+    setVillageInput(loc.villageName ?? "");
   }
 
   function daysInSeason(plantingDate: string | null): number | null {
@@ -181,14 +221,14 @@ export default function StatsScreen() {
   }
 
   function confirmLogout() {
-    Alert.alert("Sign out", "Sign out of FarmPal on this phone?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("statsSignOutTitle"), t("statsSignOutBody"), [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Sign out",
+        text: t("statsSignOut"),
         style: "destructive",
         onPress: () => {
           logout().catch(() => {
-            Alert.alert("Sign-out failed", "We could not sign you out cleanly. Please try again.");
+            Alert.alert(t("statsSignOutFailedTitle"), t("statsSignOutFailedBody"));
           });
         },
       },
@@ -204,15 +244,15 @@ export default function StatsScreen() {
     : readingCount >= 40 ? "#D4851A"
     : colors.mutedForeground;
   const learningHeadline =
-    readingCount >= 120 ? "Strong local learning base"
-    : readingCount >= 40 ? "Building useful local patterns"
-    : "Still collecting local history";
+    readingCount >= 120 ? t("statsLearningStrongTitle")
+    : readingCount >= 40 ? t("statsLearningBuildingTitle")
+    : t("statsLearningStartingTitle");
   const learningSummary =
     readingCount >= 120
-      ? "This farm network has enough recent readings to support more stable field guidance."
+      ? t("statsLearningStrongBody")
       : readingCount >= 40
-      ? "FarmPal has started to recognize local weather patterns, and more readings will keep improving it."
-      : "Keep checking weather from the dashboard so the system can build stronger local memory.";
+      ? t("statsLearningBuildingBody")
+      : t("statsLearningStartingBody");
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -313,23 +353,44 @@ export default function StatsScreen() {
     },
     accountActionText: { fontSize: 12, fontFamily: "Inter_700Bold", color: colors.primary },
     locationItem: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingVertical: 10,
+      paddingVertical: 12,
       borderBottomWidth: 1,
       borderColor: colors.border,
     },
-    locationItemLast: { flexDirection: "row", alignItems: "center", paddingTop: 10 },
-    locationName: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground, flex: 1 },
-    locationCoords: { fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, flex: 1 },
+    locationItemLast: { paddingTop: 12 },
+    locationTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+    },
+    locationMeta: {
+      flex: 1,
+      gap: 4,
+      minWidth: 0,
+    },
+    locationName: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.foreground },
+    locationVillage: { fontSize: 11, fontFamily: "Inter_500Medium", color: colors.primary },
+    locationCoords: { fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
     locationBadge: {
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderRadius: 6,
-      marginRight: 8,
     },
     locationBadgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
-    locationActions: { flexDirection: "row", gap: 8, alignItems: "center" },
+    locationControlsRow: {
+      marginTop: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      flexWrap: "wrap",
+    },
+    locationActions: {
+      flexDirection: "row",
+      gap: 12,
+      alignItems: "center",
+      paddingRight: 4,
+    },
     addForm: {
       marginHorizontal: 16,
       backgroundColor: colors.card,
@@ -351,16 +412,18 @@ export default function StatsScreen() {
       fontFamily: "Inter_400Regular",
       color: colors.foreground,
     },
-    addFormBtns: { flexDirection: "row", gap: 10 },
+    addFormBtns: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
     addBtn: {
-      flex: 1,
+      flexGrow: 1,
+      minWidth: 140,
       paddingVertical: 10,
       borderRadius: 10,
       backgroundColor: colors.primary,
       alignItems: "center",
     },
     cancelBtn: {
-      flex: 1,
+      flexGrow: 1,
+      minWidth: 140,
       paddingVertical: 10,
       borderRadius: 10,
       backgroundColor: colors.muted,
@@ -380,7 +443,7 @@ export default function StatsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Analytics</Text>
+        <Text style={styles.title}>{t("statsTitle")}</Text>
         <Pressable style={styles.refreshBtn} onPress={refetchAll} testID="stats-refresh-btn">
           <Feather
             name="refresh-cw"
@@ -406,17 +469,17 @@ export default function StatsScreen() {
           <View style={[styles.lastReadingRow, { marginTop: 12 }]}>
             <Feather name="clock" size={12} color={colors.mutedForeground} />
             <Text style={styles.lastReadingText}>
-              Last reading: {new Date(statsData.lastReading).toLocaleString()}
+              {t("statsLastReading")}: {new Date(statsData.lastReading).toLocaleString()}
             </Text>
           </View>
         ) : null}
 
-        <Text style={styles.sectionLabel}>AVERAGES</Text>
+        <Text style={styles.sectionLabel}>{t("statsAverages")}</Text>
         <StatsPanel stats={statsData} isLoading={statsLoading} />
 
         {predEntries.length > 0 ? (
           <>
-            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>RECENT OUTLOOKS</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>{t("statsRecentNotes")}</Text>
             <View style={styles.card}>
               {predEntries.map(([pred, count], idx) => (
                 <View key={pred} style={idx === predEntries.length - 1 ? styles.rowLast : styles.row}>
@@ -428,7 +491,7 @@ export default function StatsScreen() {
           </>
         ) : null}
 
-        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>FIELD INTELLIGENCE</Text>
+        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>{t("statsLearning")}</Text>
         <View style={styles.card}>
           <View style={styles.insightRow}>
             <View style={[styles.ringContainer, { borderColor: learningColor }]}>
@@ -437,55 +500,59 @@ export default function StatsScreen() {
             <View style={styles.insightMeta}>
               <Text style={styles.insightTitle}>{learningHeadline}</Text>
               <Text style={styles.insightSub}>
-                {locations.length} tracked {locations.length === 1 ? "farm" : "farms"} and {readingCount} stored readings.
+                {tf("statsTrackedSummary", {
+                  farms: locations.length,
+                  farmLabel: locations.length === 1 ? t("statsFarmLabelOne") : t("statsFarmLabelMany"),
+                  readings: readingCount,
+                })}
               </Text>
               <Text style={styles.insightSub}>{learningSummary}</Text>
             </View>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Latest reading</Text>
+            <Text style={styles.label}>{t("statsLatestReading")}</Text>
             <Text style={styles.mutedValue}>
-              {statsData?.lastReading ? new Date(statsData.lastReading).toLocaleDateString() : "Not yet available"}
+              {statsData?.lastReading ? new Date(statsData.lastReading).toLocaleDateString() : t("statsNotAvailable")}
             </Text>
           </View>
           <View style={styles.rowLast}>
-            <Text style={styles.label}>Prediction note types tracked</Text>
+            <Text style={styles.label}>{t("statsPredictionTypes")}</Text>
             <Text style={styles.value}>{predEntries.length}</Text>
           </View>
         </View>
 
-        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>YOUR ACCOUNT</Text>
+        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>{t("statsAccount")}</Text>
         <View style={styles.card}>
           <View style={styles.accountRow}>
             <View style={styles.accountIcon}>
               <Feather name="user" size={18} color={colors.primary} />
             </View>
             <View style={styles.accountMeta}>
-              <Text style={styles.accountTitle}>{farmer?.displayName?.trim() || "Farm owner"}</Text>
-              <Text style={styles.accountSub}>{farmer?.phoneNumber ?? "Phone number unavailable"}</Text>
+              <Text style={styles.accountTitle}>{farmer?.displayName?.trim() || t("statsFarmOwner")}</Text>
+              <Text style={styles.accountSub}>{farmer?.phoneNumber ?? t("statsPhoneUnavailable")}</Text>
             </View>
             <TouchableOpacity style={styles.accountAction} onPress={confirmLogout}>
-              <Text style={styles.accountActionText}>Sign out</Text>
+              <Text style={styles.accountActionText}>{t("statsSignOut")}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 24, marginBottom: 10 }}>
-          <Text style={[styles.sectionLabel, { marginBottom: 0, flex: 1 }]}>TRACKED LOCATIONS</Text>
+          <Text style={[styles.sectionLabel, { marginBottom: 0, flex: 1 }]}>{t("statsTrackedLocations")}</Text>
           <TouchableOpacity
             onPress={() => setShowAddLocation(!showAddLocation)}
             style={{ marginRight: 20, flexDirection: "row", alignItems: "center", gap: 4 }}
           >
             <Feather name={showAddLocation ? "x" : "plus"} size={14} color={colors.primary} />
             <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.primary }}>
-              {showAddLocation ? "Cancel" : "Add"}
+              {showAddLocation ? t("cancel") : t("statsAdd")}
             </Text>
           </TouchableOpacity>
         </View>
 
         {showAddLocation ? (
           <View style={[styles.addForm, { marginBottom: 12 }]}>
-            <Text style={styles.addFormTitle}>Add tracked location</Text>
+            <Text style={styles.addFormTitle}>{t("statsAddTrackedLocation")}</Text>
 
             {pickedLocation ? (
               <TouchableOpacity
@@ -513,7 +580,7 @@ export default function StatsScreen() {
                 >
                   <Feather name="list" size={14} color={colors.primary} />
                   <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.primary }}>
-                    Browse by county
+                    {t("browseCounty")}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -522,7 +589,7 @@ export default function StatsScreen() {
                 >
                   <Feather name="map" size={14} color={colors.primary} />
                   <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.primary }}>
-                    Pin on map
+                    {t("pinOnMap")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -530,10 +597,21 @@ export default function StatsScreen() {
 
             <TextInput
               style={styles.input}
-              placeholder={pickedLocation ? `Custom name (default: ${pickedLocation.town})` : "Custom name (optional)"}
+              placeholder={
+                pickedLocation
+                  ? tf("statsCustomNameDefault", { name: pickedLocation.town })
+                  : t("statsCustomNameOptional")
+              }
               placeholderTextColor={colors.mutedForeground}
               value={newName}
               onChangeText={setNewName}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder={villageCopy[language].villagePlaceholder}
+              placeholderTextColor={colors.mutedForeground}
+              value={newVillageName}
+              onChangeText={setNewVillageName}
             />
 
             {pickedLocation ? (
@@ -552,7 +630,7 @@ export default function StatsScreen() {
                 </Text>
                 <TouchableOpacity onPress={() => setPickedLocation(null)} style={{ marginLeft: "auto" }}>
                   <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.destructive ?? "#e53e3e" }}>
-                    Clear
+                    {t("statsClear")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -567,7 +645,7 @@ export default function StatsScreen() {
                 {addLocationMutation.isPending ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.addBtnText}>Add location</Text>
+                  <Text style={styles.addBtnText}>{t("statsAddLocation")}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
@@ -576,9 +654,10 @@ export default function StatsScreen() {
                   setShowAddLocation(false);
                   setPickedLocation(null);
                   setNewName("");
+                  setNewVillageName("");
                 }}
               >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={styles.cancelBtnText}>{t("cancel")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -615,7 +694,7 @@ export default function StatsScreen() {
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
           ) : locations.length === 0 ? (
             <Text style={styles.emptyText}>
-              No tracked locations yet. Add one above to enable local weather tracking.
+              {t("statsNoTrackedLocations")}
             </Text>
           ) : (
             locations.map((loc, idx) => {
@@ -625,30 +704,35 @@ export default function StatsScreen() {
 
               return (
                 <View key={loc.id} style={isLast ? styles.locationItemLast : styles.locationItem}>
-                  <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-                    <View style={{ flex: 1 }}>
+                  <View style={styles.locationTopRow}>
+                    <View style={styles.locationMeta}>
                       <Text style={styles.locationName}>{loc.name}</Text>
+                      <Text style={styles.locationVillage}>
+                        {loc.villageName?.trim() || villageCopy[language].villageMissing}
+                      </Text>
                       <Text style={styles.locationCoords}>
                         {loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}
                         {loc.elevation != null ? `  -  ${Math.round(loc.elevation)}m` : ""}
                       </Text>
                     </View>
-                    <View style={styles.locationActions}>
-                      <View
+                  </View>
+                  <View style={styles.locationControlsRow}>
+                    <View
+                      style={[
+                        styles.locationBadge,
+                        { backgroundColor: loc.active ? "#E8F5E9" : colors.muted },
+                      ]}
+                    >
+                      <Text
                         style={[
-                          styles.locationBadge,
-                          { backgroundColor: loc.active ? "#E8F5E9" : colors.muted },
+                          styles.locationBadgeText,
+                          { color: loc.active ? "#3D8B37" : colors.mutedForeground },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.locationBadgeText,
-                            { color: loc.active ? "#3D8B37" : colors.mutedForeground },
-                          ]}
-                        >
-                          {loc.active ? "ACTIVE" : "PAUSED"}
-                        </Text>
-                      </View>
+                        {loc.active ? t("statsActive") : t("statsPaused")}
+                      </Text>
+                    </View>
+                    <View style={styles.locationActions}>
                       <TouchableOpacity
                         onPress={() =>
                           loc.active
@@ -670,7 +754,14 @@ export default function StatsScreen() {
 
                   {!isEditing ? (
                     <TouchableOpacity
-                      onPress={() => startEditCrop({ id: loc.id, cropType: loc.cropType ?? null, plantingDate: loc.plantingDate ?? null })}
+                      onPress={() =>
+                        startEditCrop({
+                          id: loc.id,
+                          cropType: loc.cropType ?? null,
+                          plantingDate: loc.plantingDate ?? null,
+                          villageName: loc.villageName ?? null,
+                        })
+                      }
                       style={{
                         flexDirection: "row",
                         alignItems: "center",
@@ -683,25 +774,31 @@ export default function StatsScreen() {
                     >
                       <Feather name="calendar" size={13} color={loc.cropType ? colors.primary : colors.mutedForeground} />
                       <View style={{ flex: 1 }}>
-                        {loc.cropType ? (
+                          {loc.cropType ? (
                           <>
                             <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
                               {loc.cropType}
                               {days != null ? (
                                 <Text style={{ color: "#3D8B37", fontFamily: "Inter_700Bold" }}>
-                                  {" "} - Day {days} of season
+                                  {" "} - {tf("statsSeasonDay", { day: days })}
                                 </Text>
                               ) : null}
                             </Text>
                             {loc.plantingDate ? (
                               <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-                                Planted {new Date(loc.plantingDate).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+                                {tf("statsPlantedOn", {
+                                  date: new Date(loc.plantingDate).toLocaleDateString("en-KE", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  }),
+                                })}
                               </Text>
                             ) : null}
                           </>
                         ) : (
                           <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-                            Tap to set crop and planting date
+                            {t("statsTapToSetCrop")}
                           </Text>
                         )}
                       </View>
@@ -710,10 +807,10 @@ export default function StatsScreen() {
                   ) : (
                     <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: colors.border }}>
                       <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, marginBottom: 8, letterSpacing: 0.6 }}>
-                        CROP CALENDAR
+                        {t("statsCropCalendar")}
                       </Text>
                       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                        {["Maize", "Tea", "Coffee", "Beans", "Potatoes", "Wheat", "Vegetables", "Pyrethrum"].map((crop) => (
+                        {(["Maize", "Tea", "Coffee", "Beans", "Potatoes", "Wheat", "Vegetables", "Pyrethrum"] as const).map((crop) => (
                           <TouchableOpacity
                             key={crop}
                             onPress={() => setCropTypeInput(crop)}
@@ -733,21 +830,28 @@ export default function StatsScreen() {
                                 color: cropTypeInput === crop ? colors.primary : colors.foreground,
                               }}
                             >
-                              {crop}
+                              {cropChipCopy[crop][language]}
                             </Text>
                           </TouchableOpacity>
                         ))}
                       </View>
                       <TextInput
                         style={[styles.input, { marginBottom: 8, fontSize: 13 }]}
-                        placeholder="Custom crop name..."
+                        placeholder={t("statsCustomCropPlaceholder")}
                         placeholderTextColor={colors.mutedForeground}
                         value={cropTypeInput}
                         onChangeText={setCropTypeInput}
                       />
                       <TextInput
+                        style={[styles.input, { marginBottom: 8, fontSize: 13 }]}
+                        placeholder={villageCopy[language].villagePlaceholder}
+                        placeholderTextColor={colors.mutedForeground}
+                        value={villageInput}
+                        onChangeText={setVillageInput}
+                      />
+                      <TextInput
                         style={[styles.input, { marginBottom: 10, fontSize: 13 }]}
-                        placeholder="Planting date (YYYY-MM-DD)"
+                        placeholder={t("statsPlantingDatePlaceholder")}
                         placeholderTextColor={colors.mutedForeground}
                         value={plantingDateInput}
                         onChangeText={setPlantingDateInput}
@@ -758,11 +862,11 @@ export default function StatsScreen() {
                           {savingCrop ? (
                             <ActivityIndicator size="small" color="#fff" />
                           ) : (
-                            <Text style={styles.addBtnText}>Save crop</Text>
+                            <Text style={styles.addBtnText}>{t("statsSaveCrop")}</Text>
                           )}
                         </TouchableOpacity>
                         <TouchableOpacity style={[styles.cancelBtn, { flex: 1 }]} onPress={() => setEditingCropId(null)}>
-                          <Text style={styles.cancelBtnText}>Cancel</Text>
+                          <Text style={styles.cancelBtnText}>{t("cancel")}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>

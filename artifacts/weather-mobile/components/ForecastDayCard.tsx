@@ -10,6 +10,7 @@ import { useColorScheme } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import colorTokens from "@/constants/colors";
 import type { DailyForecast } from "@/lib/api-client";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface ForecastDayCardProps {
   day: DailyForecast;
@@ -52,11 +53,14 @@ function getScoreColor(score: number): string {
   return "#CC0000";
 }
 
-function getScoreLabel(score: number): string {
-  if (score >= 8) return "Excellent";
-  if (score >= 6) return "Good";
-  if (score >= 4) return "Fair";
-  return "Poor";
+function getScoreLabel(
+  score: number,
+  t: (key: "dayScoreExcellent" | "dayScoreGood" | "dayScoreFair" | "dayScorePoor") => string,
+): string {
+  if (score >= 8) return t("dayScoreExcellent");
+  if (score >= 6) return t("dayScoreGood");
+  if (score >= 4) return t("dayScoreFair");
+  return t("dayScorePoor");
 }
 
 const FROST_COLORS: Record<string, string> = {
@@ -84,11 +88,12 @@ export default function ForecastDayCard({ day, isToday }: ForecastDayCardProps) 
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = useColors();
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
 
   const { day: dateLabel, dayOfWeek } = formatDate(day.date);
   const scoreColor = getScoreColor(day.fieldDayScore);
-  const scoreLabel = getScoreLabel(day.fieldDayScore);
+  const scoreLabel = getScoreLabel(day.fieldDayScore, t);
 
   return (
     <TouchableOpacity
@@ -105,7 +110,7 @@ export default function ForecastDayCard({ day, isToday }: ForecastDayCardProps) 
     >
       {isToday && (
         <View style={styles.todayBadge}>
-          <Text style={styles.todayBadgeText}>TODAY</Text>
+          <Text style={styles.todayBadgeText}>{t("dayToday")}</Text>
         </View>
       )}
 
@@ -178,12 +183,12 @@ export default function ForecastDayCard({ day, isToday }: ForecastDayCardProps) 
         <View style={styles.statItem}>
           <Feather name="droplet" size={12} color="#00ACC1" />
           <Text style={[styles.statValue, { color: colors.text }]}>{day.avgHumidity}%</Text>
-          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>humid</Text>
+          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{t("dayHumidShort")}</Text>
         </View>
         <View style={styles.statItem}>
           <Feather name="sun" size={12} color="#F57F17" />
           <Text style={[styles.statValue, { color: colors.text }]}>UV {day.uvIndexMax}</Text>
-          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>index</Text>
+          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{t("dayUvIndex")}</Text>
         </View>
         <View style={styles.statItem}>
           <Feather name="activity" size={12} color={colorTokens.light.primary} />
@@ -193,13 +198,13 @@ export default function ForecastDayCard({ day, isToday }: ForecastDayCardProps) 
         {day.sprayWindowOpen && (
           <View style={[styles.sprayBadge, { backgroundColor: colorTokens.light.primary + "20" }]}>
             <Feather name="check-circle" size={11} color={colorTokens.light.primary} />
-            <Text style={[styles.sprayBadgeText, { color: colorTokens.light.primary }]}>Spray OK</Text>
+            <Text style={[styles.sprayBadgeText, { color: colorTokens.light.primary }]}>{t("daySprayOk")}</Text>
           </View>
         )}
         {day.irrigationNeeded && (
           <View style={[styles.sprayBadge, { backgroundColor: "#2196F3" + "20" }]}>
             <Feather name="droplet" size={11} color="#1565C0" />
-            <Text style={[styles.sprayBadgeText, { color: "#1565C0" }]}>Irrigate</Text>
+            <Text style={[styles.sprayBadgeText, { color: "#1565C0" }]}>{t("dayIrrigate")}</Text>
           </View>
         )}
       </View>
@@ -207,7 +212,7 @@ export default function ForecastDayCard({ day, isToday }: ForecastDayCardProps) 
       {/* Expanded farm actions */}
       {expanded && (
         <View style={[styles.actionsContainer, { borderTopColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }]}>
-          <Text style={[styles.actionsTitle, { color: colors.mutedForeground }]}>FARM ACTIONS</Text>
+          <Text style={[styles.actionsTitle, { color: colors.mutedForeground }]}>{t("dayFarmActions")}</Text>
           {day.farmActions.map((action, idx) => (
             <View key={idx} style={styles.actionRow}>
               <View style={[styles.actionDot, { backgroundColor: colorTokens.light.primary }]} />
@@ -218,7 +223,7 @@ export default function ForecastDayCard({ day, isToday }: ForecastDayCardProps) 
       )}
 
       <Text style={[styles.expandHint, { color: colors.mutedForeground }]}>
-        {expanded ? "▲ collapse" : "▼ tap for farm actions"}
+        {expanded ? `▲ ${t("dayCollapse")}` : `▼ ${t("dayExpandActions")}`}
       </Text>
     </TouchableOpacity>
   );

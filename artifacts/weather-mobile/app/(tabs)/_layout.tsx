@@ -6,6 +6,7 @@ import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // Accent colours for each tab — visually distinct, farmer-friendly
 const TAB_COLORS = {
@@ -44,11 +45,32 @@ function TabIcon({ name, focused, accentColor }: TabIconProps) {
 
 export default function TabLayout() {
   const colors = useColors();
+  const { language } = useLanguage();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isAndroid = Platform.OS === "android";
   const insets = useSafeAreaInsets();
+  const tabLabels = {
+    en: {
+      dashboard: "Home",
+      forecast: "7 days",
+      history: "Past weather",
+      analytics: "Farms",
+    },
+    sw: {
+      dashboard: "Nyumbani",
+      forecast: "Siku 7",
+      history: "Ya nyuma",
+      analytics: "Mashamba",
+    },
+    ki: {
+      dashboard: "Mucii",
+      forecast: "Matuku 7",
+      history: "Iguru",
+      analytics: "Migunda",
+    },
+  } as const;
 
   // On Android the system gesture/nav bar sits at the bottom.
   // We add its height as paddingBottom so the tab bar clears it completely.
@@ -100,7 +122,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Dashboard",
+          title: tabLabels[language].dashboard,
           tabBarActiveTintColor: TAB_COLORS.dashboard,
           tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="cloud" focused={focused} accentColor={TAB_COLORS.dashboard} />
@@ -110,7 +132,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="forecast"
         options={{
-          title: "Forecast",
+          title: tabLabels[language].forecast,
           tabBarActiveTintColor: TAB_COLORS.forecast,
           tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="calendar" focused={focused} accentColor={TAB_COLORS.forecast} />
@@ -120,7 +142,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="history"
         options={{
-          title: "History",
+          title: tabLabels[language].history,
           tabBarActiveTintColor: TAB_COLORS.history,
           tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="clock" focused={focused} accentColor={TAB_COLORS.history} />
@@ -130,7 +152,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          title: "Analytics",
+          title: tabLabels[language].analytics,
           tabBarActiveTintColor: TAB_COLORS.analytics,
           tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="bar-chart-2" focused={focused} accentColor={TAB_COLORS.analytics} />

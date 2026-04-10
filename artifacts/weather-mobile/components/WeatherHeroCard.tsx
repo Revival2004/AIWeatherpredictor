@@ -12,6 +12,7 @@ import {
 
 import type { WeatherPredictionResponse } from "@/lib/api-client";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface WeatherHeroCardProps {
   data: WeatherPredictionResponse | undefined;
@@ -23,20 +24,20 @@ interface WeatherHeroCardProps {
 
 const DEGREE = "\u00b0";
 
-function wmoCondition(code: number): string {
-  if (code === 0) return "Clear sky";
-  if (code <= 3) return "Partly cloudy";
-  if (code <= 9) return "Fog";
-  if (code <= 19) return "Drizzle";
-  if (code <= 29) return "Light rain";
-  if (code <= 39) return "Snow";
-  if (code <= 49) return "Fog";
-  if (code <= 59) return "Showers";
-  if (code <= 69) return "Rain";
-  if (code <= 79) return "Snow";
-  if (code <= 84) return "Rain showers";
-  if (code <= 94) return "Snow showers";
-  return "Storm risk";
+function wmoCondition(code: number, t: (key: "weatherClear" | "weatherPartlyCloudy" | "weatherFog" | "weatherDrizzle" | "weatherLightRain" | "weatherSnow" | "weatherShowers" | "weatherRain" | "weatherRainShowers" | "weatherSnowShowers" | "weatherStormRisk") => string): string {
+  if (code === 0) return t("weatherClear");
+  if (code <= 3) return t("weatherPartlyCloudy");
+  if (code <= 9) return t("weatherFog");
+  if (code <= 19) return t("weatherDrizzle");
+  if (code <= 29) return t("weatherLightRain");
+  if (code <= 39) return t("weatherSnow");
+  if (code <= 49) return t("weatherFog");
+  if (code <= 59) return t("weatherShowers");
+  if (code <= 69) return t("weatherRain");
+  if (code <= 79) return t("weatherSnow");
+  if (code <= 84) return t("weatherRainShowers");
+  if (code <= 94) return t("weatherSnowShowers");
+  return t("weatherStormRisk");
 }
 
 function wmoIcon(code: number): keyof typeof Feather.glyphMap {
@@ -76,6 +77,7 @@ export function WeatherHeroCard({
   locationName,
 }: WeatherHeroCardProps) {
   const colors = useColors();
+  const { t } = useLanguage();
 
   const handleRefresh = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -89,7 +91,7 @@ export function WeatherHeroCard({
       <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
         <View style={styles.loadingBox}>
           <ActivityIndicator color="rgba(255,255,255,0.9)" size="large" />
-          <Text style={styles.loadingText}>Building your farm weather view...</Text>
+          <Text style={styles.loadingText}>{t("heroLoading")}</Text>
         </View>
       </LinearGradient>
     );
@@ -100,9 +102,9 @@ export function WeatherHeroCard({
       <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
         <View style={styles.loadingBox}>
           <Feather name="alert-triangle" size={32} color="rgba(255,255,255,0.9)" />
-          <Text style={styles.loadingText}>We could not refresh this farm view.</Text>
+          <Text style={styles.loadingText}>{t("heroError")}</Text>
           <Pressable style={styles.retryBtn} onPress={handleRefresh}>
-            <Text style={styles.retryText}>Try again</Text>
+            <Text style={styles.retryText}>{t("heroRetry")}</Text>
           </Pressable>
         </View>
       </LinearGradient>
@@ -114,17 +116,17 @@ export function WeatherHeroCard({
       <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
         <View style={styles.loadingBox}>
           <Feather name="map-pin" size={44} color="rgba(255,255,255,0.92)" />
-          <Text style={[styles.loadingText, { marginTop: 10 }]}>Waiting for your current farm signal...</Text>
+          <Text style={[styles.loadingText, { marginTop: 10 }]}>{t("heroWaiting")}</Text>
         </View>
       </LinearGradient>
     );
   }
 
   const { weather, prediction, location } = data;
-  const condition = wmoCondition(weather.weathercode);
+  const condition = wmoCondition(weather.weathercode, t);
   const modelColor = predictionColor(prediction?.prediction ?? "");
   const confidence = Math.round((prediction?.confidence ?? 0) * 100);
-  const primaryLocation = locationName || "Current farm area";
+  const primaryLocation = locationName || t("currentLocationLabel");
 
   return (
     <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
@@ -139,7 +141,7 @@ export function WeatherHeroCard({
           <View style={styles.heroMeta}>
             <View style={styles.liveBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveBadgeText}>Live farm view</Text>
+              <Text style={styles.liveBadgeText}>{t("heroLiveBadge")}</Text>
             </View>
             <View>
               <Text style={styles.locationTitle}>{primaryLocation}</Text>
@@ -159,15 +161,15 @@ export function WeatherHeroCard({
           <Feather name={wmoIcon(weather.weathercode)} size={14} color="rgba(255,255,255,0.86)" />
           <Text style={styles.conditionText}>{condition}</Text>
           <View style={styles.conditionDivider} />
-          <Text style={styles.conditionText}>Updated for field decisions</Text>
+          <Text style={styles.conditionText}>{t("heroDecisionReady")}</Text>
         </View>
 
         {/* Stats grid */}
         <View style={styles.statsRow}>
           {[
-            { icon: "droplet" as const, value: `${weather.humidity}%`, label: "Humidity" },
-            { icon: "wind" as const, value: `${weather.windspeed} km/h`, label: "Wind" },
-            { icon: "activity" as const, value: `${weather.pressure} hPa`, label: "Pressure" },
+            { icon: "droplet" as const, value: `${weather.humidity}%`, label: t("humidityLabel") },
+            { icon: "wind" as const, value: `${weather.windspeed} km/h`, label: t("windLabel") },
+            { icon: "activity" as const, value: `${weather.pressure} hPa`, label: t("pressureLabel") },
           ].map((item) => (
             <View key={item.label} style={styles.statPill}>
               <Feather name={item.icon} size={13} color="rgba(255,255,255,0.72)" />
@@ -181,9 +183,9 @@ export function WeatherHeroCard({
 
         <View style={styles.outlookCard}>
           <View style={styles.outlookCopy}>
-            <Text style={styles.outlookLabel}>Short-range outlook</Text>
-            <Text style={styles.outlookText}>{prediction?.prediction ?? "Model pending"}</Text>
-            <Text style={styles.predText}>{prediction?.prediction ?? "—"}</Text>
+            <Text style={styles.outlookLabel}>{t("heroOutlookLabel")}</Text>
+            <Text style={styles.outlookText}>{prediction?.prediction ?? t("heroModelPending")}</Text>
+            <Text style={styles.predText}>{prediction?.prediction ?? t("heroModelPending")}</Text>
           </View>
           <View style={[styles.confBadge, { backgroundColor: modelColor + "2A" }]}>
             <Text style={styles.confText}>{confidence}%</Text>

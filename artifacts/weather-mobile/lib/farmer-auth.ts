@@ -4,6 +4,7 @@ export interface FarmerIdentity {
   id: number;
   phoneNumber: string;
   displayName: string | null;
+  villageName: string | null;
 }
 
 export interface FarmerAuthStatus {
@@ -26,11 +27,18 @@ export interface VerifyOtpResponse {
   token: string;
   farmer: FarmerIdentity;
   expiresAt: string;
+  auth: FarmerAuthStatus;
 }
 
 export interface FarmerSessionResponse {
   authenticated: boolean;
   farmer?: FarmerIdentity;
+  auth: FarmerAuthStatus;
+}
+
+export interface UpdateFarmerProfileResponse {
+  updated: true;
+  farmer: FarmerIdentity;
   auth: FarmerAuthStatus;
 }
 
@@ -75,6 +83,21 @@ export async function getFarmerSession(): Promise<FarmerSessionResponse> {
 export async function logoutFarmer(): Promise<{ success: boolean }> {
   return customFetch<{ success: boolean }>("/api/auth/logout", {
     method: "POST",
+    responseType: "json",
+  });
+}
+
+export async function updateFarmerProfile(input: {
+  displayName?: string;
+  villageName?: string;
+}): Promise<UpdateFarmerProfileResponse> {
+  return customFetch<UpdateFarmerProfileResponse>("/api/auth/profile", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify(input),
     responseType: "json",
   });
 }

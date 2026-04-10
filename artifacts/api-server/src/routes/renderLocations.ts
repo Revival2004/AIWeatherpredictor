@@ -18,6 +18,7 @@ router.use(requireFarmerOrAdminAuth);
 
 const addLocationBodySchema = z.object({
   name: z.string().min(1).max(100),
+  villageName: z.string().trim().max(80).optional(),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
 });
@@ -25,6 +26,7 @@ const addLocationBodySchema = z.object({
 const updateCropBodySchema = z.object({
   cropType: z.string().optional(),
   plantingDate: z.string().optional(),
+  villageName: z.string().trim().max(80).optional(),
 });
 
 async function fetchElevation(lat: number, lon: number): Promise<number | null> {
@@ -74,7 +76,7 @@ router.post("/locations", async (req, res): Promise<void> => {
     return;
   }
 
-  const { name, latitude, longitude } = parsed.data;
+  const { name, villageName, latitude, longitude } = parsed.data;
   const elevation = await fetchElevation(latitude, longitude);
   const actor = getAuthenticatedActorFromRequest(req);
   const location = await addLocation(
@@ -82,7 +84,10 @@ router.post("/locations", async (req, res): Promise<void> => {
     latitude,
     longitude,
     actor.role === "farmer" ? actor.farmerSession.id : null,
-    { elevation },
+    {
+      elevation,
+      villageName: villageName?.trim() || null,
+    },
   );
   triggerLocationBootstrap(latitude, longitude, name);
 
@@ -110,6 +115,8 @@ router.put("/locations/:id/crop", async (req, res): Promise<void> => {
   const location = await updateLocation(id, getScopedFarmerId(req), {
     cropType: parsed.data.cropType ?? null,
     plantingDate: parsed.data.plantingDate ?? null,
+    villageName:
+      parsed.data.villageName === undefined ? undefined : parsed.data.villageName.trim() || null,
   });
 
   if (!location) {

@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface PickedLocation {
   latitude: number;
@@ -22,7 +23,8 @@ interface Props {
   onConfirm: (loc: PickedLocation) => void;
 }
 
-const MAP_HTML = `<!DOCTYPE html>
+function buildMapHtml(copy: { hint: string; lookup: string }) {
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
@@ -60,7 +62,7 @@ const MAP_HTML = `<!DOCTYPE html>
 </head>
 <body>
 <div id="map"></div>
-<div id="hint">Tap anywhere to drop a pin on your farm</div>
+<div id="hint">${copy.hint}</div>
 <script>
   var map = L.map('map', { zoomControl: true }).setView([0.2, 37.9], 6);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -72,14 +74,8 @@ const MAP_HTML = `<!DOCTYPE html>
   var marker = null;
   var farmIcon = L.divIcon({ className: '', html: '<div class="farm-pin"></div>', iconSize: [22, 22], iconAnchor: [11, 22] });
 
-  map.on('click', function(e) {
-    var lat = e.latlng.lat;
-    var lon = e.latlng.lng;
-
-    if (marker) { marker.remove(); }
-    marker = L.marker([lat, lon], { icon: farmIcon }).addTo(map);
-
-    document.getElementById('hint').textContent = 'Looking up location…';
+  function updateLocation(lat, lon) {
+    document.getElementById('hint').textContent = '${copy.lookup}';
 
     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'pin', lat: lat, lon: lon }));
 
@@ -102,21 +98,41 @@ const MAP_HTML = `<!DOCTYPE html>
       document.getElementById('hint').textContent = fallback;
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'name', name: fallback }));
     });
+  }
+
+  map.on('click', function(e) {
+    var lat = e.latlng.lat;
+    var lon = e.latlng.lng;
+
+    if (marker) { marker.remove(); }
+    marker = L.marker([lat, lon], { icon: farmIcon, draggable: true }).addTo(map);
+    marker.on('dragend', function(event) {
+      var position = event.target.getLatLng();
+      updateLocation(position.lat, position.lng);
+    });
+
+    updateLocation(lat, lon);
   });
 </script>
 </body>
 </html>`;
+}
 
 export default function MapLocationPicker({ visible, onClose, onConfirm }: Props) {
   const colors = useColors();
+  const { t } = useLanguage();
   const [pinned, setPinned] = useState<{ lat: number; lon: number; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const mapHtml = buildMapHtml({
+    hint: t("mapAdjustHint"),
+    lookup: t("lookingUp"),
+  });
 
   function handleMessage(event: { nativeEvent: { data: string } }) {
     try {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type === "pin") {
-        setPinned({ lat: msg.lat, lon: msg.lon, name: "Looking up…" });
+        setPinned({ lat: msg.lat, lon: msg.lon, name: t("lookingUp") });
       } else if (msg.type === "name") {
         setPinned((prev) => prev ? { ...prev, name: msg.name } : null);
       }
@@ -140,9 +156,9 @@ export default function MapLocationPicker({ visible, onClose, onConfirm }: Props
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-            <Text style={{ color: colors.mutedForeground, fontSize: 15 }}>✕ Cancel</Text>
+            <Text style={{ color: colors.mutedForeground, fontSize: 15 }}>{`X ${t("cancel")}`}</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.foreground }]}>Pin Your Farm</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>{t("pinFarm")}</Text>
           <View style={{ width: 80 }} />
         </View>
 
@@ -150,11 +166,11 @@ export default function MapLocationPicker({ visible, onClose, onConfirm }: Props
           {loading && (
             <View style={[styles.loadingOverlay, { backgroundColor: colors.background }]}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={{ color: colors.mutedForeground, marginTop: 10, fontSize: 13 }}>Loading map…</Text>
+              <Text style={{ color: colors.mutedForeground, marginTop: 10, fontSize: 13 }}>{t("loadingMap")}</Text>
             </View>
           )}
           <WebView
-            source={{ html: MAP_HTML }}
+            source={{ html: mapHtml }}
             style={styles.webview}
             onLoadEnd={() => setLoading(false)}
             onMessage={handleMessage}
@@ -185,12 +201,12 @@ export default function MapLocationPicker({ visible, onClose, onConfirm }: Props
                 style={[styles.confirmBtn, { backgroundColor: "#3D8B37" }]}
                 onPress={handleConfirm}
               >
-                <Text style={styles.confirmText}>Use This Location</Text>
+                <Text style={styles.confirmText}>{t("useLocation")}</Text>
               </TouchableOpacity>
             </>
           ) : (
             <Text style={[styles.footerHint, { color: colors.mutedForeground }]}>
-              Tap anywhere on the map to pin your farm location
+              {t("mapAdjustHint")}
             </Text>
           )}
         </View>

@@ -9,8 +9,18 @@ import { Feather } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -18,8 +28,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { setBaseUrl } from "@/lib/api-client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import FarmerOtpScreen from "@/components/FarmerOtpScreen";
-import { LanguageProvider } from "@/contexts/LanguageContext";
+import RootLayoutShell from "@/components/RootLayoutShell";
+import { LanguageProvider, useLanguage } from "@/contexts/LanguageContext";
 import { FarmerSessionProvider, useFarmerSession } from "@/contexts/FarmerSessionContext";
+import { useColors } from "@/hooks/useColors";
 
 // EXPO_PUBLIC_DOMAIN is set in eas.json for production builds.
 // It can be a full URL (https://farmpal-api.onrender.com) or just a domain.
@@ -27,7 +39,7 @@ import { FarmerSessionProvider, useFarmerSession } from "@/contexts/FarmerSessio
 const _apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
 const _baseUrl = _apiDomain
   ? (_apiDomain.startsWith("http") ? _apiDomain : `https://${_apiDomain}`)
-  : "https://farmpal-api.onrender.com";
+  : "https://farmpal-api-gxv9.onrender.com";
 setBaseUrl(_baseUrl);
 
 SplashScreen.preventAutoHideAsync();
@@ -36,13 +48,29 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   const { status } = useFarmerSession();
+  const { language } = useLanguage();
+
+  const loadingCopy = {
+    en: {
+      title: "Opening your FarmPal account",
+      body: "Restoring your farms, weather history, and alerts.",
+    },
+    sw: {
+      title: "Tunafungua akaunti yako ya FarmPal",
+      body: "Tunarejesha mashamba yako, historia ya hali ya hewa, na tahadhari.",
+    },
+    ki: {
+      title: "Tũrahingura akaunti yaku ya FarmPal",
+      body: "Tũrĩkuuga migũnda yaku, ũhoro wa mbura, na kĩmenyithia.",
+    },
+  } as const;
 
   if (status === "checking") {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#3D8B37" />
-        <Text style={styles.loadingTitle}>Securing your FarmPal account</Text>
-        <Text style={styles.loadingCopy}>Restoring your farms, weather history, and alerts.</Text>
+        <Text style={styles.loadingTitle}>{loadingCopy[language].title}</Text>
+        <Text style={styles.loadingCopy}>{loadingCopy[language].body}</Text>
       </View>
     );
   }
@@ -108,7 +136,7 @@ export default function RootLayout() {
             <FarmerSessionProvider>
               <GestureHandlerRootView>
                 <KeyboardProvider>
-                  <RootLayoutNav />
+                  <RootLayoutShell />
                 </KeyboardProvider>
               </GestureHandlerRootView>
             </FarmerSessionProvider>

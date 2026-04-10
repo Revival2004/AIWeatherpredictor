@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetWeatherHistory, getGetWeatherHistoryQueryKey } from "@/lib/api-client";
 import { HistoryCard } from "@/components/HistoryCard";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const LIMITS = [10, 25, 50];
 const LAST_LOC_KEY = "microclimate_last_location_v1";
@@ -44,6 +45,7 @@ function parseStoredCoords(raw: string | null): { lat: number; lon: number } | n
 export default function HistoryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [limit, setLimit] = useState(25);
   const [farmCoords, setFarmCoords] = useState<{ lat: number; lon: number } | null>(null);
 
@@ -182,13 +184,13 @@ export default function HistoryScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>History</Text>
+          <Text style={styles.title}>{t("historyTitle")}</Text>
         </View>
         <View style={styles.errorBox}>
           <Feather name="alert-circle" size={40} color={colors.muted} />
-          <Text style={styles.errorText}>Could not load history</Text>
+          <Text style={styles.errorText}>{t("historyLoadFailed")}</Text>
           <Pressable style={styles.retryBtn} onPress={() => refetch()}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("historyRetry")}</Text>
           </Pressable>
         </View>
       </View>
@@ -199,9 +201,9 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>History</Text>
+          <Text style={styles.title}>{t("historyTitle")}</Text>
           <Text style={[styles.filterLabel, { marginTop: 4, marginRight: 0 }]}>
-            {farmCoords ? "Recent readings near your selected farm" : "Recent readings across saved observations"}
+            {farmCoords ? t("historySelectedFarm") : t("historySavedArea")}
           </Text>
         </View>
         <Pressable
@@ -218,7 +220,7 @@ export default function HistoryScreen() {
       </View>
 
       <View style={styles.filterRow}>
-        <Text style={styles.filterLabel}>SHOW</Text>
+        <Text style={styles.filterLabel}>{t("historyShowLabel")}</Text>
         {LIMITS.map((l) => (
           <Pressable
             key={l}
@@ -254,7 +256,7 @@ export default function HistoryScreen() {
           <View style={styles.emptyBox}>
             <Feather name="clock" size={40} color={colors.muted} />
             <Text style={styles.emptyText}>
-              No weather records yet. Fetch weather from the Dashboard to start building history.
+              {t("historyEmpty")}
             </Text>
           </View>
         }

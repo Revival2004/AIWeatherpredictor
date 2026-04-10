@@ -12,6 +12,7 @@ import FarmerFeedbackCard, {
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import OnboardingModal from "@/components/OnboardingModal";
+import { useFarmerSession } from "@/contexts/FarmerSessionContext";
 import { useLanguage, LANG_LABELS } from "@/contexts/LanguageContext";
 import MLStatusBadge from "@/components/MLStatusBadge";
 import {
@@ -30,17 +31,21 @@ import {
   useGetWeatherAlerts,
   useGetRainPrediction,
   useGetPlantingAdvisory,
+  useGetLocations,
+  getGetLocationsQueryKey,
   getGetWeatherQueryKey,
   getGetWeatherAlertsQueryKey,
   getGetRainPredictionQueryKey,
+  type TrackedLocation,
   type WeatherPredictionResponse,
   type RainPredictionResponse,
 } from "@/lib/api-client";
-import PlantingAdvisoryCard from "@/components/PlantingAdvisoryCard";
-import { WeatherHeroCard } from "@/components/WeatherHeroCard";
-import AlertsBanner from "@/components/AlertsBanner";
+import DecisionAssistantCard from "@/components/DecisionAssistantCard";
+import PlantingAdvisoryCard from "@/components/PlantingAdvisoryCardClean";
+import AlertsBanner from "@/components/AlertsBannerClean";
 import CommunityInsightCard from "@/components/CommunityInsightCard";
 import TodayTimeline from "@/components/TodayTimeline";
+import WeatherSnapshotCard from "@/components/WeatherSnapshotCardClean";
 import { useColors } from "@/hooks/useColors";
 
 interface Coords {
@@ -48,7 +53,17 @@ interface Coords {
   longitude: number;
 }
 
-type TipFn = (key: import("@/constants/translations").TranslationKey) => string;
+type LocationSelectionSource = "device" | "tracked" | "picker" | "map";
+
+interface StoredLocationState {
+  coords: Coords;
+  label: string | null;
+  userSelected: boolean;
+  source: LocationSelectionSource;
+  trackedLocationId?: number | null;
+}
+
+type TipFn = (key: import("@/constants/translationsV2").TranslationKey) => string;
 
 function getFarmingTip(data: WeatherPredictionResponse | undefined, t: TipFn): string | null {
   if (!data) return null;
@@ -75,7 +90,7 @@ function getFarmingTip(data: WeatherPredictionResponse | undefined, t: TipFn): s
 
 function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
   const colors = useColors();
-  const { t } = useLanguage();
+  const { t, tf } = useLanguage();
   const willRain = data.predictionValue === "yes";
   const pct = Math.round(data.probability * 100);
   const isSklearn = data.modelVersion?.startsWith("sklearn");
@@ -88,10 +103,19 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
   const communityMessage =
     community?.used && community.farmerCount > 0
       ? community.signalDirection === "wetter"
-        ? `${community.farmerCount} nearby farmer${community.farmerCount === 1 ? "" : "s"} within ${community.zoneRadiusKm} km are reporting wetter conditions, which lifts this forecast slightly.`
+        ? tf("communityMessageWetter", {
+            count: community.farmerCount,
+            radius: community.zoneRadiusKm,
+          })
         : community.signalDirection === "drier"
-        ? `${community.farmerCount} nearby farmer${community.farmerCount === 1 ? "" : "s"} within ${community.zoneRadiusKm} km are seeing drier conditions, which pulls this forecast down slightly.`
-        : `${community.farmerCount} nearby farmer${community.farmerCount === 1 ? "" : "s"} within ${community.zoneRadiusKm} km are contributing a mixed regional signal.`
+        ? tf("communityMessageDrier", {
+            count: community.farmerCount,
+            radius: community.zoneRadiusKm,
+          })
+        : tf("communityMessageMixed", {
+            count: community.farmerCount,
+            radius: community.zoneRadiusKm,
+          })
       : null;
 
   return (
@@ -129,7 +153,7 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
             {pct}%
           </Text>
           <Text style={{ fontSize: 9, fontFamily: "Inter_500Medium", color: accentColor, opacity: 0.75 }}>
-            RAIN
+            {t("rainCircleLabel")}
           </Text>
         </View>
 
@@ -146,7 +170,7 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
             </Text>
           </View>
           <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 8 }}>
-            {t("aiPrediction")} - 2-hour window
+            {t("aiPrediction")}
           </Text>
 
           {/* Segmented probability bar */}
@@ -168,8 +192,8 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
             })}
           </View>
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 3 }}>
-            <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>Low</Text>
-            <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>High</Text>
+            <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>{t("lowLabel")}</Text>
+            <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>{t("highLabel")}</Text>
           </View>
         </View>
       </View>
@@ -186,10 +210,10 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
           backgroundColor: colors.muted,
         }}>
           {[
-            { label: "Logistic Reg.", value: mp.lr, color: "#4A90D9" },
-            { label: "Random Forest", value: mp.rf, color: "#3D8B37" },
-            { label: "Gradient Boost", value: mp.gb, color: "#D4851A" },
-            { label: "Ensemble", value: data.probability, color: accentColor },
+            { label: t("patternModel"), value: mp.lr, color: "#4A90D9" },
+            { label: t("treeModel"), value: mp.rf, color: "#3D8B37" },
+            { label: t("boostModel"), value: mp.gb, color: "#D4851A" },
+            { label: t("combinedModel"), value: data.probability, color: accentColor },
           ].map((m, i) => (
             <View key={m.label} style={{ flex: 1, alignItems: "center", borderLeftWidth: i > 0 ? 1 : 0, borderColor: colors.border }}>
               <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: m.color }}>
@@ -336,7 +360,8 @@ function SectionHeader({
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { t, toggle, language } = useLanguage();
+  const { t, tf, toggle, language } = useLanguage();
+  const { farmer } = useFarmerSession();
   const [coords, setCoords] = useState<Coords | null>(null);
   const [fetchEnabled, setFetchEnabled] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -344,6 +369,8 @@ export default function DashboardScreen() {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
+  const [locationSource, setLocationSource] = useState<LocationSelectionSource>("device");
+  const [selectedTrackedLocationId, setSelectedTrackedLocationId] = useState<number | null>(null);
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [locationUpdated, setLocationUpdated] = useState(false);
@@ -351,6 +378,21 @@ export default function DashboardScreen() {
   const [feedbackDismissed, setFeedbackDismissed] = useState(false);
   const [feedbackNow, setFeedbackNow] = useState(Date.now());
   const lastFeedbackKeyRef = useRef<string | null>(null);
+  const { data: locationsData } = useGetLocations({
+    query: {
+      queryKey: getGetLocationsQueryKey(),
+      staleTime: 30 * 1000,
+    },
+  });
+  const currentVillageName = farmer?.villageName?.trim() || null;
+  const trackedFarmLabel = (loc: TrackedLocation) => loc.villageName?.trim() || loc.name;
+  const currentLocationSummary = currentVillageName
+    ? ({
+        en: `Current village: ${currentVillageName}`,
+        sw: `Kijiji cha sasa: ${currentVillageName}`,
+        ki: `Current village: ${currentVillageName}`,
+      } as const)[language]
+    : t("homeSubtitle");
 
   // Haversine distance in km between two coordinates
   const distanceKm = (a: Coords, b: Coords): number => {
@@ -365,6 +407,35 @@ export default function DashboardScreen() {
         Math.cos((b.latitude * Math.PI) / 180) *
         sinLon * sinLon;
     return R * 2 * Math.atan2(Math.sqrt(chord), Math.sqrt(1 - chord));
+  };
+
+  const applyLocationSelection = (
+    next: StoredLocationState,
+    options?: { showUpdatedBanner?: boolean },
+  ) => {
+    if (options?.showUpdatedBanner) {
+      setLocationUpdated(true);
+      setTimeout(() => setLocationUpdated(false), 4000);
+    }
+
+    setCoords(next.coords);
+    setFetchEnabled(true);
+    setGeoLoading(false);
+    setLocError(null);
+    setLocationLabel(next.label);
+    setLocationSource(next.source);
+    setSelectedTrackedLocationId(next.trackedLocationId ?? null);
+    AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify(next)).catch(() => {});
+  };
+
+  const useTrackedFarm = (loc: TrackedLocation) => {
+    applyLocationSelection({
+      coords: { latitude: loc.latitude, longitude: loc.longitude },
+      label: trackedFarmLabel(loc),
+      userSelected: true,
+      source: "tracked",
+      trackedLocationId: loc.id,
+    });
   };
 
   // On mount: restore last saved location immediately, then silently re-check GPS.
@@ -383,19 +454,11 @@ export default function DashboardScreen() {
       if (silent && savedCoords) {
         const moved = distanceKm(savedCoords, c);
         if (moved < 5) return; // hasn't moved significantly - keep saved location
-        // Farmer has moved - update silently and show brief banner
-        setLocationUpdated(true);
-        setTimeout(() => setLocationUpdated(false), 4000);
       }
-      setCoords(c);
-      setLocationLabel(null);
-      setFetchEnabled(true);
-      setGeoLoading(false);
-      setLocError(null);
-      AsyncStorage.setItem(
-        LAST_LOC_KEY,
-        JSON.stringify({ coords: c, label: null, userSelected: false, source: "device" })
-      ).catch(() => {});
+      applyLocationSelection(
+        { coords: c, label: null, userSelected: false, source: "device" },
+        { showUpdatedBanner: silent && Boolean(savedCoords) },
+      );
     };
 
     const tryGps = (silent: boolean) => {
@@ -405,21 +468,21 @@ export default function DashboardScreen() {
             (pos) => applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, silent),
             () => {
               if (!silent) {
-                showLocationRequired("Enable location or tap the pin button to choose your farm.");
+                showLocationRequired(t("locationEnableOrPick"));
               }
             },
             { timeout: 8000 }
           );
         } else {
           if (!silent) {
-            showLocationRequired("Location is unavailable in this browser. Tap the pin button to choose your farm.");
+            showLocationRequired(t("locationBrowserPick"));
           }
         }
       } else {
         Location.requestForegroundPermissionsAsync().then(({ status }) => {
           if (status !== "granted") {
             if (!silent) {
-              showLocationRequired("Location permission denied. Allow location or use the pin button to choose your farm.");
+              showLocationRequired(t("locationPermissionOrPick"));
             }
             return null;
           }
@@ -429,7 +492,7 @@ export default function DashboardScreen() {
           applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, silent);
         }).catch(() => {
           if (!silent) {
-            showLocationRequired("Could not get your current location. Try again or use the pin button to choose your farm.");
+            showLocationRequired(t("locationCurrentOrPick"));
           }
         });
       }
@@ -438,16 +501,23 @@ export default function DashboardScreen() {
     AsyncStorage.getItem(LAST_LOC_KEY).then((raw) => {
       if (raw) {
         try {
-          const saved = JSON.parse(raw);
+          const saved = JSON.parse(raw) as Partial<StoredLocationState>;
           if (!isLegacyStoredDefault(saved) && saved.coords) {
             // Step 1: Show saved location immediately (fast)
             savedCoords = saved.coords;
-            setCoords(saved.coords);
-            setLocationLabel(saved.label ?? null);
-            setFetchEnabled(true);
-            setLocError(null);
-            // Step 2: Silently re-check GPS in background - auto-update if moved >5 km
-            tryGps(true);
+            applyLocationSelection({
+              coords: saved.coords,
+              label: saved.label ?? null,
+              userSelected: Boolean(saved.userSelected),
+              source: saved.source ?? (saved.userSelected ? "picker" : "device"),
+              trackedLocationId:
+                typeof saved.trackedLocationId === "number" ? saved.trackedLocationId : null,
+            });
+            if (!saved.userSelected) {
+              // Only background-refresh device-driven views. If the farmer explicitly chose a
+              // saved farm, keep that farm locked until they switch back to current location.
+              tryGps(true);
+            }
             return;
           }
         } catch {}
@@ -570,46 +640,40 @@ export default function DashboardScreen() {
         if (typeof navigator !== "undefined" && navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (pos) => {
-              const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-              setCoords(c);
-              setFetchEnabled(true);
-              setGeoLoading(false);
-              setLocationLabel(null);
-              AsyncStorage.setItem(
-                LAST_LOC_KEY,
-                JSON.stringify({ coords: c, label: null, userSelected: false, source: "device" })
-              ).catch(() => {});
+              applyLocationSelection({
+                coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+                label: null,
+                userSelected: false,
+                source: "device",
+              });
             },
             () => {
-              setLocError("Location unavailable");
+              setLocError(t("locationUnavailableShort"));
               setGeoLoading(false);
             },
             { timeout: 10000 }
           );
         } else {
-          setLocError("Geolocation not supported");
+          setLocError(t("locationUnsupportedShort"));
           setGeoLoading(false);
         }
       } else {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
-          setLocError("Location permission denied");
+          setLocError(t("locationPermissionDeniedShort"));
           setGeoLoading(false);
           return;
         }
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-        setCoords(c);
-        setFetchEnabled(true);
-        setGeoLoading(false);
-        setLocationLabel(null);
-        AsyncStorage.setItem(
-          LAST_LOC_KEY,
-          JSON.stringify({ coords: c, label: null, userSelected: false, source: "device" })
-        ).catch(() => {});
+        applyLocationSelection({
+          coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+          label: null,
+          userSelected: false,
+          source: "device",
+        });
       }
     } catch {
-      setLocError("Could not get location");
+      setLocError(t("locationCouldNotGetShort"));
       setGeoLoading(false);
     }
   };
@@ -644,10 +708,13 @@ export default function DashboardScreen() {
     const prob = rainData.probability;
     if (prob >= 0.7 && prob !== lastAlertedProbRef.current) {
       lastAlertedProbRef.current = prob;
-      const name = locationLabel ?? "your farm";
+      const name =
+        locationSource === "device"
+          ? currentVillageName || t("yourFarmFallback")
+          : locationLabel ?? t("yourFarmFallback");
       sendRainAlert(prob, name).catch(() => {});
     }
-  }, [rainData, locationLabel]);
+  }, [currentVillageName, locationLabel, locationSource, rainData, t]);
 
   useEffect(() => {
     if (!rainData || !coords) {
@@ -666,7 +733,10 @@ export default function DashboardScreen() {
     const nextPending: PendingFeedback = {
       lat: coords.latitude,
       lon: coords.longitude,
-      locationName: locationLabel ?? "your farm",
+      locationName:
+        locationSource === "device"
+          ? currentVillageName || t("yourFarmFallback")
+          : locationLabel ?? t("yourFarmFallback"),
       predictedAt: Date.now(),
       targetTime: rainData.targetTime,
       dueAt,
@@ -690,9 +760,19 @@ export default function DashboardScreen() {
         Math.round((dueAt - Date.now()) / 1000),
       ).catch(() => {});
     }
-  }, [coords, locationLabel, pendingFeedback, rainData]);
+  }, [coords, currentVillageName, locationLabel, locationSource, pendingFeedback, rainData, t]);
 
   const isLoading = geoLoading || weatherLoading;
+  const activeLocations = (locationsData?.locations ?? []).filter((loc) => loc.active);
+  const isCurrentLocationView = locationSource === "device";
+  const heroLocationName = isCurrentLocationView
+    ? currentVillageName || t("currentLocationLabel")
+    : locationLabel;
+  const locationSummary = isCurrentLocationView
+    ? currentLocationSummary
+    : locationLabel
+    ? tf("viewingSavedFarm", { name: locationLabel })
+    : t("homeSubtitle");
 
   const styles = StyleSheet.create({
     container: {
@@ -719,6 +799,41 @@ export default function DashboardScreen() {
       fontSize: 13,
       fontFamily: "Inter_400Regular",
       color: colors.mutedForeground,
+    },
+    switcherCard: {
+      marginHorizontal: 16,
+      marginTop: 8,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      padding: 14,
+      gap: 10,
+    },
+    switcherTitle: {
+      fontSize: 14,
+      fontFamily: "Inter_700Bold",
+      color: colors.foreground,
+    },
+    switcherSubtitle: {
+      fontSize: 12,
+      lineHeight: 18,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+    },
+    switcherChip: {
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginRight: 8,
+    },
+    switcherChipText: {
+      fontSize: 12,
+      fontFamily: "Inter_600SemiBold",
     },
     locateBtn: {
       width: 44,
@@ -866,9 +981,7 @@ export default function DashboardScreen() {
       <View style={styles.header}>
         <View style={styles.titleBlock}>
           <Text style={styles.title}>FarmPal</Text>
-          <Text style={styles.subtitle}>
-            {locationLabel ? locationLabel : "Live weather and field decisions for your farm"}
-          </Text>
+          <Text style={styles.subtitle}>{locationSummary}</Text>
         </View>
         <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
           {/* Language toggle */}
@@ -909,12 +1022,76 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      <View style={styles.switcherCard}>
+        <Text style={styles.switcherTitle}>{t("savedFarmsTitle")}</Text>
+        <Text style={styles.switcherSubtitle}>
+          {activeLocations.length > 0 ? t("savedFarmsSubtitle") : t("noTrackedFarms")}
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <Pressable
+            style={[
+              styles.switcherChip,
+              {
+                backgroundColor: isCurrentLocationView ? `${colors.primary}18` : colors.background,
+                borderColor: isCurrentLocationView ? colors.primary : colors.border,
+              },
+            ]}
+            onPress={handleLocate}
+          >
+            <Feather
+              name="crosshair"
+              size={14}
+              color={isCurrentLocationView ? colors.primary : colors.mutedForeground}
+            />
+            <Text
+              style={[
+                styles.switcherChipText,
+                { color: isCurrentLocationView ? colors.primary : colors.foreground },
+              ]}
+            >
+              {t("useCurrentLocationCta")}
+            </Text>
+          </Pressable>
+
+          {activeLocations.map((loc) => {
+            const selected = selectedTrackedLocationId === loc.id;
+            return (
+              <Pressable
+                key={loc.id}
+                style={[
+                  styles.switcherChip,
+                  {
+                    backgroundColor: selected ? `${colors.primary}18` : colors.background,
+                    borderColor: selected ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => useTrackedFarm(loc)}
+              >
+                <Feather
+                  name="map-pin"
+                  size={14}
+                  color={selected ? colors.primary : colors.mutedForeground}
+                />
+                <Text
+                  style={[
+                    styles.switcherChipText,
+                    { color: selected ? colors.primary : colors.foreground },
+                  ]}
+                >
+                  {trackedFarmLabel(loc)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {/* Location auto-updated banner */}
       {locationUpdated && (
         <View style={{ backgroundColor: "#3D8B37", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Feather name="map-pin" size={13} color="#fff" />
           <Text style={{ color: "#fff", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
-            Location updated - showing your latest farm area
+            {t("locationUpdatedBanner")}
           </Text>
         </View>
       )}
@@ -924,7 +1101,7 @@ export default function DashboardScreen() {
         <View style={{ backgroundColor: "#1D4ED822", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#1D4ED833" }}>
           <Feather name="trending-down" size={13} color="#1D4ED8" />
           <Text style={{ color: "#1D4ED8", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
-            Pressure is falling on your farm - rain may be approaching
+            {t("pressureFallingBanner")}
           </Text>
           <Text style={{ color: "#1D4ED899", fontSize: 11, fontFamily: "Inter_400Regular" }}>
             {baro.pressure?.toFixed(0)} hPa
@@ -935,7 +1112,7 @@ export default function DashboardScreen() {
         <View style={{ backgroundColor: "#15803D22", paddingVertical: 5, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#15803D33" }}>
           <Feather name="trending-up" size={13} color="#15803D" />
           <Text style={{ color: "#15803D", fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 }}>
-            Pressure is rising - field conditions are improving
+            {t("pressureRisingBanner")}
           </Text>
           <Text style={{ color: "#15803D99", fontSize: 11, fontFamily: "Inter_400Regular" }}>
             {baro.pressure?.toFixed(0)} hPa
@@ -962,15 +1139,13 @@ export default function DashboardScreen() {
         onClose={() => setShowLocationPicker(false)}
         onSelect={(loc: PickedLocation) => {
           const c = { latitude: loc.lat, longitude: loc.lon };
-          setCoords(c);
-          setFetchEnabled(true);
-          setLocError(null);
-          setLocationLabel(loc.displayName);
+          applyLocationSelection({
+            coords: c,
+            label: loc.displayName,
+            userSelected: true,
+            source: "picker",
+          });
           setShowLocationPicker(false);
-          AsyncStorage.setItem(
-            LAST_LOC_KEY,
-            JSON.stringify({ coords: c, label: loc.displayName, userSelected: true, source: "picker" })
-          ).catch(() => {});
         }}
       />
 
@@ -979,15 +1154,12 @@ export default function DashboardScreen() {
         visible={showMapPicker}
         onClose={() => setShowMapPicker(false)}
         onConfirm={(loc) => {
-          const c = { latitude: loc.latitude, longitude: loc.longitude };
-          setCoords(c);
-          setFetchEnabled(true);
-          setLocError(null);
-          setLocationLabel(loc.name);
-          AsyncStorage.setItem(
-            LAST_LOC_KEY,
-            JSON.stringify({ coords: c, label: loc.name, userSelected: true, source: "map" })
-          ).catch(() => {});
+          applyLocationSelection({
+            coords: { latitude: loc.latitude, longitude: loc.longitude },
+            label: loc.name,
+            userSelected: true,
+            source: "map",
+          });
         }}
       />
 
@@ -1026,12 +1198,26 @@ export default function DashboardScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <WeatherHeroCard
+        {plantingAdvisory ? (
+          <>
+            <DecisionAssistantCard
+              advisory={plantingAdvisory}
+              rain={rainData ?? null}
+              lang={language}
+            />
+            <PlantingAdvisoryCard
+              data={plantingAdvisory}
+              lang={language}
+            />
+          </>
+        ) : null}
+
+        <WeatherSnapshotCard
           data={weatherData}
           isLoading={isLoading}
           error={weatherError as Error | null}
           onRefresh={() => refetch()}
-          locationName={locationLabel}
+          locationName={heroLocationName}
         />
 
         {__DEV__ && weatherError && (
@@ -1048,8 +1234,8 @@ export default function DashboardScreen() {
         {coords && (
           <>
             <SectionHeader
-              title="Nearby farm signal"
-              subtitle="What farmers close to this field are seeing right now"
+              title={t("nearbySignalTitle")}
+              subtitle={t("nearbySignalSubtitle")}
             />
             <CommunityInsightCard
               lat={coords.latitude}
@@ -1061,19 +1247,19 @@ export default function DashboardScreen() {
         {weatherData && (
           <>
             <SectionHeader
-              title="Field conditions"
-              subtitle="The current readings shaping today&apos;s farm decisions"
+              title={t("fieldConditionsTitle")}
+              subtitle={t("fieldConditionsSubtitle")}
             />
             <View style={styles.extraRow}>
               <View style={styles.extraCard}>
-                <Text style={styles.extraLabel}>Temperature</Text>
+                <Text style={styles.extraLabel}>{t("temperatureLabel")}</Text>
                 <Text style={styles.extraValue}>
                   {Math.round(weatherData.weather.temperature)}
                   <Text style={styles.extraUnit}>{"\u00B0"}C</Text>
                 </Text>
               </View>
               <View style={styles.extraCard}>
-                <Text style={styles.extraLabel}>Pressure</Text>
+                <Text style={styles.extraLabel}>{t("pressureLabel")}</Text>
                 <Text style={styles.extraValue}>
                   {weatherData.weather.pressure}
                   <Text style={styles.extraUnit}> hPa</Text>
@@ -1082,14 +1268,14 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.extraRow}>
               <View style={styles.extraCard}>
-                <Text style={styles.extraLabel}>Humidity</Text>
+                <Text style={styles.extraLabel}>{t("humidityLabel")}</Text>
                 <Text style={styles.extraValue}>
                   {weatherData.weather.humidity}
                   <Text style={styles.extraUnit}>%</Text>
                 </Text>
               </View>
               <View style={styles.extraCard}>
-                <Text style={styles.extraLabel}>Wind Speed</Text>
+                <Text style={styles.extraLabel}>{t("windLabel")}</Text>
                 <Text style={styles.extraValue}>
                   {weatherData.weather.windspeed}
                   <Text style={styles.extraUnit}> km/h</Text>
@@ -1101,8 +1287,8 @@ export default function DashboardScreen() {
             {rainData && (
               <>
                 <SectionHeader
-                  title="Rain chance soon"
-                  subtitle="Model view for the next 2 hours"
+                  title={t("rainSoonTitle")}
+                  subtitle={t("rainSoonSubtitle")}
                   right={
                     <MLStatusBadge
                       modelVersion={rainData.modelVersion}
@@ -1119,23 +1305,27 @@ export default function DashboardScreen() {
                         <Feather name="message-circle" size={18} color="#3B82F6" />
                       </View>
                       <View style={styles.followUpMeta}>
-                        <Text style={styles.followUpTitle}>We will follow up on this prediction</Text>
+                        <Text style={styles.followUpTitle}>{t("predictionFollowUpTitle")}</Text>
                         <Text style={styles.followUpText}>
-                          Around {feedbackTimeLabel}, FarmPal will ask whether it actually rained at {pendingFeedback.locationName}.
-                          One quick answer helps the model learn your field faster.
+                          {tf("predictionFollowUpText", {
+                            time: feedbackTimeLabel ?? "--:--",
+                            name: pendingFeedback.locationName,
+                          })}
                         </Text>
                       </View>
                     </View>
                     <View style={styles.followUpPill}>
-                      <Text style={styles.followUpPillText}>Feedback opens in {feedbackCountdown}</Text>
+                      <Text style={styles.followUpPillText}>
+                        {tf("feedbackOpensIn", { time: feedbackCountdown ?? "0 min" })}
+                      </Text>
                     </View>
                   </View>
                 ) : null}
                 {pendingFeedback && feedbackDue && !feedbackDismissed ? (
                   <>
                     <SectionHeader
-                      title="How did the weather turn out?"
-                      subtitle="Your answer teaches FarmPal what really happened on this field."
+                      title={t("feedbackSectionTitle")}
+                      subtitle={t("feedbackSectionSubtitle")}
                     />
                     <FarmerFeedbackCard
                       pending={pendingFeedback}
@@ -1158,18 +1348,7 @@ export default function DashboardScreen() {
               />
             )}
 
-            {/* Planting Advisory - false-onset detection */}
-            {plantingAdvisory && (
-              <>
-                <Text style={styles.sectionLabel}>PLANTING ADVISORY</Text>
-                <PlantingAdvisoryCard
-                  data={plantingAdvisory}
-                  lang={language}
-                />
-              </>
-            )}
-
-            <Text style={styles.sectionLabel}>FARMING TIP</Text>
+            <Text style={styles.sectionLabel}>{t("actionNowTitle").toUpperCase()}</Text>
             {farmingTip && (
               <View style={styles.tipCard}>
                 <Feather

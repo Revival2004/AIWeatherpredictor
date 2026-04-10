@@ -1,10 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-native";
 import * as Haptics from "expo-haptics";
-import { useColors } from "@/hooks/useColors";
+import React, { useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useColors } from "@/hooks/useColors";
 import { customFetch } from "@/lib/api-client/custom-fetch";
 import { cancelFeedbackReminder } from "@/services/NotificationService";
 
@@ -28,16 +29,59 @@ interface Props {
 }
 
 type Answer = "yes" | "almost" | "no";
-type Step = "rain" | "cloudy" | "done";
+
+const COPY = {
+  en: {
+    title: "What happened on your farm?",
+    detail: "One quick answer helps FarmPal learn this field faster.",
+    yes: "Rain",
+    almost: "Almost",
+    no: "Dry",
+    later: "Later",
+    saved: "Saved. Thanks for helping FarmPal learn your farm.",
+  },
+  sw: {
+    title: "Kulitokea nini shambani?",
+    detail: "Jibu moja la haraka husaidia FarmPal kujifunza shamba hili vizuri zaidi.",
+    yes: "Mvua",
+    almost: "Karibu",
+    no: "Kavu",
+    later: "Baadaye",
+    saved: "Imehifadhiwa. Asante kwa kusaidia FarmPal kujifunza shamba lako.",
+  },
+  ki: {
+    title: "What happened on your farm?",
+    detail: "One quick answer helps FarmPal learn this field faster.",
+    yes: "Rain",
+    almost: "Almost",
+    no: "Dry",
+    later: "Later",
+    saved: "Saved. Thanks for helping FarmPal learn your farm.",
+  },
+} as const;
 
 export default function FarmerFeedbackCard({ pending, onClose, onComplete }: Props) {
   const colors = useColors();
-  const { t } = useLanguage();
-  const [step, setStep] = useState<Step>("rain");
+  const { language } = useLanguage();
   const [submitting, setSubmitting] = useState(false);
-  const [rainAnswer, setRainAnswer] = useState<Answer | null>(null);
+  const [saved, setSaved] = useState(false);
 
-  const submitFeedback = async (question: string, answer: Answer) => {
+  const copy = COPY[language];
+  const hoursAgo = Math.max(1, Math.round((Date.now() - pending.predictedAt) / (1000 * 60 * 60)));
+  const followUpSummary = useMemo(() => {
+    if (language === "sw") {
+      return pending.predictionValue === "yes"
+        ? `Takriban saa ${hoursAgo} zilizopita, FarmPal ilitarajia mvua kwenye ${pending.locationName}.`
+        : `Takriban saa ${hoursAgo} zilizopita, FarmPal ilitarajia hali kavu kwenye ${pending.locationName}.`;
+    }
+
+    return pending.predictionValue === "yes"
+      ? `About ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago, FarmPal expected rain at ${pending.locationName}.`
+      : `About ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago, FarmPal expected mostly dry conditions at ${pending.locationName}.`;
+  }, [hoursAgo, language, pending.locationName, pending.predictionValue]);
+
+  const submitFeedback = async (answer: Answer) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSubmitting(true);
     try {
       await customFetch("/api/feedback", {
@@ -46,42 +90,22 @@ export default function FarmerFeedbackCard({ pending, onClose, onComplete }: Pro
         body: JSON.stringify({
           lat: pending.lat,
           lon: pending.lon,
-          question,
+          question: "rain",
           answer,
           locationName: pending.locationName,
         }),
         responseType: "json",
       });
-    } catch {}
+      setSaved(true);
+      await AsyncStorage.removeItem(FEEDBACK_PENDING_KEY);
+      await cancelFeedbackReminder().catch(() => {});
+      setTimeout(onComplete, 800);
+    } catch {
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(false);
   };
-
-  const handleRainAnswer = async (answer: Answer) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setRainAnswer(answer);
-    await submitFeedback("rain", answer);
-    setStep("cloudy");
-  };
-
-  const handleCloudyAnswer = async (answer: Answer) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await submitFeedback("cloudy", answer);
-    setStep("done");
-    await AsyncStorage.removeItem(FEEDBACK_PENDING_KEY);
-    await cancelFeedbackReminder().catch(() => {});
-    setTimeout(onComplete, 1200);
-  };
-
-  const handleSkip = () => {
-    onClose();
-  };
-
-  const hoursAgo = Math.max(1, Math.round((Date.now() - pending.predictedAt) / (1000 * 60 * 60)));
-  const followUpSummary =
-    pending.predictionValue === "yes"
-      ? `About ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago, FarmPal expected rain at ${pending.locationName}.`
-      : `About ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago, FarmPal expected mostly dry conditions at ${pending.locationName}.`;
-  const followUpDetail = `Your answer helps the model learn what really happened on your field.`;
 
   return (
     <View
@@ -94,71 +118,36 @@ export default function FarmerFeedbackCard({ pending, onClose, onComplete }: Pro
         },
       ]}
     >
-      {step === "rain" && (
-        <>
-          <View style={styles.row}>
-            <View style={[styles.iconCircle, { backgroundColor: "#3B82F615" }]}>
-              <Feather name="cloud-rain" size={20} color="#3B82F6" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: colors.foreground }]}>
-                {t("feedbackTitle")}
-              </Text>
-              <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-                {followUpSummary}
-              </Text>
-              <Text style={[styles.sub, { color: colors.mutedForeground, marginTop: 4 }]}>
-                {followUpDetail}
-              </Text>
-            </View>
-            <Pressable onPress={handleSkip} hitSlop={12}>
-              <Feather name="x" size={18} color={colors.mutedForeground} />
-            </Pressable>
+      <View style={styles.row}>
+        <View style={[styles.iconCircle, { backgroundColor: "#3B82F615" }]}>
+          <Feather name="cloud-rain" size={20} color="#3B82F6" />
+        </View>
+        <View style={styles.meta}>
+          <Text style={[styles.title, { color: colors.foreground }]}>{copy.title}</Text>
+          <Text style={[styles.sub, { color: colors.mutedForeground }]}>{followUpSummary}</Text>
+          <Text style={[styles.sub, { color: colors.mutedForeground, marginTop: 4 }]}>{copy.detail}</Text>
+        </View>
+        {!saved ? (
+          <Pressable onPress={onClose} hitSlop={12}>
+            <Text style={[styles.laterText, { color: colors.mutedForeground }]}>{copy.later}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {saved ? (
+        <View style={styles.doneWrap}>
+          <View style={[styles.iconCircle, { backgroundColor: "#10B98115" }]}>
+            <Feather name="check-circle" size={20} color="#10B981" />
           </View>
-
-          {submitting ? (
-            <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
-          ) : (
-            <View style={styles.buttonRow}>
-              <AnswerBtn label={t("feedbackYes")} color="#3B82F6" icon="check-circle" onPress={() => handleRainAnswer("yes")} />
-              <AnswerBtn label={t("feedbackAlmost")} color="#D4851A" icon="cloud-drizzle" onPress={() => handleRainAnswer("almost")} />
-              <AnswerBtn label={t("feedbackNo")} color="#3D8B37" icon="sun" onPress={() => handleRainAnswer("no")} />
-            </View>
-          )}
-        </>
-      )}
-
-      {step === "cloudy" && (
-        <>
-          <View style={styles.row}>
-            <View style={[styles.iconCircle, { backgroundColor: "#6B728015" }]}>
-              <Feather name="cloud" size={20} color="#6B7280" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: colors.foreground }]}>
-                {t("feedbackCloudy")}
-              </Text>
-            </View>
-          </View>
-
-          {submitting ? (
-            <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
-          ) : (
-            <View style={styles.buttonRow}>
-              <AnswerBtn label={t("feedbackYesCloudy")} color="#6B7280" icon="cloud" onPress={() => handleCloudyAnswer("yes")} />
-              <AnswerBtn label={t("feedbackPartlyCloudy")} color="#D4851A" icon="cloud-drizzle" onPress={() => handleCloudyAnswer("almost")} />
-              <AnswerBtn label={t("feedbackSunny")} color="#F59E0B" icon="sun" onPress={() => handleCloudyAnswer("no")} />
-            </View>
-          )}
-        </>
-      )}
-
-      {step === "done" && (
-        <View style={[styles.row, { justifyContent: "center", paddingVertical: 4 }]}>
-          <Feather name="check-circle" size={20} color="#3D8B37" />
-          <Text style={[styles.title, { color: "#3D8B37", marginLeft: 8 }]}>
-            {t("feedbackThanks")}
-          </Text>
+          <Text style={[styles.doneText, { color: colors.foreground }]}>{copy.saved}</Text>
+        </View>
+      ) : submitting ? (
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 14 }} />
+      ) : (
+        <View style={styles.buttonRow}>
+          <AnswerBtn label={copy.yes} color="#2563EB" onPress={() => submitFeedback("yes")} />
+          <AnswerBtn label={copy.almost} color="#D4851A" onPress={() => submitFeedback("almost")} />
+          <AnswerBtn label={copy.no} color="#15803D" onPress={() => submitFeedback("no")} />
         </View>
       )}
     </View>
@@ -168,25 +157,18 @@ export default function FarmerFeedbackCard({ pending, onClose, onComplete }: Pro
 function AnswerBtn({
   label,
   color,
-  icon,
   onPress,
 }: {
   label: string;
   color: string;
-  icon: keyof typeof Feather.glyphMap;
   onPress: () => void;
 }) {
-  const colors = useColors();
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.answerBtn,
-        { backgroundColor: color + "18", borderColor: color + "40", opacity: pressed ? 0.7 : 1 },
-      ]}
+      style={[styles.answerBtn, { borderColor: `${color}33`, backgroundColor: `${color}12` }]}
     >
-      <Feather name={icon} size={14} color={color} />
-      <Text style={[styles.answerLabel, { color }]}>{label}</Text>
+      <Text style={[styles.answerText, { color }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -194,54 +176,72 @@ function AnswerBtn({
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    marginTop: 4,
-    borderRadius: 16,
-    padding: 16,
+    marginTop: 8,
+    borderRadius: 18,
     borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
+    padding: 16,
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
-    shadowRadius: 6,
+    shadowRadius: 20,
     elevation: 2,
   },
   row: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  meta: {
+    flex: 1,
   },
   iconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
   },
   sub: {
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 18,
     fontFamily: "Inter_400Regular",
-    marginTop: 1,
+  },
+  laterText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
   },
   buttonRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 10,
+    marginTop: 16,
   },
   answerBtn: {
     flex: 1,
-    flexDirection: "column",
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
   },
-  answerLabel: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+  answerText: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
     textAlign: "center",
+  },
+  doneWrap: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  doneText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Inter_600SemiBold",
   },
 });

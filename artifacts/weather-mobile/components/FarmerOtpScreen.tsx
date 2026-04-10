@@ -15,20 +15,22 @@ import { Feather } from "@expo/vector-icons";
 
 import { useColors } from "@/hooks/useColors";
 import { useFarmerSession } from "@/contexts/FarmerSessionContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type Stage = "phone" | "code";
 
-function formatError(error: unknown): string {
+function formatError(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
-  return "Something went wrong. Please try again.";
+  return fallback;
 }
 
 export default function FarmerOtpScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { authStatus, requestOtp, verifyOtp } = useFarmerSession();
+  const { language, t } = useLanguage();
   const [stage, setStage] = useState<Stage>("phone");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -38,16 +40,34 @@ export default function FarmerOtpScreen() {
   const [devCode, setDevCode] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const otpCopy = {
+    en: {
+      codeRequired: "Please enter the sent OTP.",
+      wrongCode: "Wrong OTP entered.",
+    },
+    sw: {
+      codeRequired: "Tafadhali weka OTP uliyotumiwa.",
+      wrongCode: "OTP uliyoingiza si sahihi.",
+    },
+    ki: {
+      codeRequired: "Please enter the sent OTP.",
+      wrongCode: "Wrong OTP entered.",
+    },
+  } as const;
 
   const helperText = useMemo(() => {
     if (authStatus?.usingDevelopmentOtp && devCode) {
-      return `Development OTP: ${devCode}`;
+      return language === "sw"
+        ? `OTP ya development: ${devCode}`
+        : language === "ki"
+        ? `OTP ya development: ${devCode}`
+        : `Development OTP: ${devCode}`;
     }
     if (stage === "code") {
-      return "Enter the code sent to your phone to unlock your farms.";
+      return t("otpCodeHelper");
     }
-    return "Use your Kenyan mobile number so FarmPal can keep your farms private.";
-  }, [authStatus?.usingDevelopmentOtp, devCode, stage]);
+    return t("otpPhoneHelper");
+  }, [authStatus?.usingDevelopmentOtp, devCode, language, stage, t]);
 
   async function handleRequestOtp(): Promise<void> {
     setRequesting(true);
@@ -63,18 +83,23 @@ export default function FarmerOtpScreen() {
       setDevCode(response.devCode ?? null);
       setInfo(
         response.deliveryMode === "development"
-          ? "OTP generated locally for development."
-          : "OTP sent by SMS.",
+          ? t("otpInfoDev")
+          : t("otpInfoSms"),
       );
       setStage("code");
     } catch (requestError) {
-      setError(formatError(requestError));
+      setError(formatError(requestError, t("otpUnexpectedError")));
     } finally {
       setRequesting(false);
     }
   }
 
   async function handleVerifyOtp(): Promise<void> {
+    if (!code.trim()) {
+      setError(otpCopy[language].codeRequired);
+      return;
+    }
+
     setVerifying(true);
     setError(null);
 
@@ -85,7 +110,8 @@ export default function FarmerOtpScreen() {
         displayName: displayName.trim() || undefined,
       });
     } catch (verifyError) {
-      setError(formatError(verifyError));
+      const message = formatError(verifyError, t("otpUnexpectedError"));
+      setError(message.includes("Wrong OTP entered.") ? otpCopy[language].wrongCode : message);
     } finally {
       setVerifying(false);
     }
@@ -250,29 +276,27 @@ export default function FarmerOtpScreen() {
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>FARMPAL FARMER ACCESS</Text>
-          <Text style={styles.title}>Private weather intelligence for your own farms.</Text>
-          <Text style={styles.subtitle}>
-            Sign in with a one-time code to keep locations, crop calendars, and field history tied to the right farmer.
-          </Text>
+          <Text style={styles.eyebrow}>{t("otpEyebrow")}</Text>
+          <Text style={styles.title}>{t("otpTitle")}</Text>
+          <Text style={styles.subtitle}>{t("otpSubtitle")}</Text>
 
           <View style={styles.featureRow}>
             <View style={styles.featureIcon}>
               <Feather name="map-pin" size={16} color={colors.primary} />
             </View>
-            <Text style={styles.featureText}>Your saved farms stay under your account, not everyone else’s.</Text>
+            <Text style={styles.featureText}>{t("otpFeaturePrivate")}</Text>
           </View>
           <View style={styles.featureRow}>
             <View style={styles.featureIcon}>
               <Feather name="shield" size={16} color={colors.primary} />
             </View>
-            <Text style={styles.featureText}>Predictions still use live GPS and Open-Meteo weather automatically.</Text>
+            <Text style={styles.featureText}>{t("otpFeatureAutoWeather")}</Text>
           </View>
         </View>
 
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>
-            {stage === "phone" ? "Sign in with your phone" : "Enter the OTP code"}
+            {stage === "phone" ? t("otpPhoneStageTitle") : t("otpCodeStageTitle")}
           </Text>
           <Text style={styles.panelSub}>{helperText}</Text>
 
@@ -292,11 +316,11 @@ export default function FarmerOtpScreen() {
           {stage === "phone" ? (
             <>
               <View>
-                <Text style={styles.fieldLabel}>Phone Number</Text>
+                <Text style={styles.fieldLabel}>{t("otpPhoneField")}</Text>
                 <TextInput
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
-                  placeholder="07XX XXX XXX or +2547XXXXXXXX"
+                  placeholder={t("otpPhonePlaceholder")}
                   placeholderTextColor={colors.mutedForeground}
                   keyboardType="phone-pad"
                   autoCapitalize="none"
@@ -304,11 +328,11 @@ export default function FarmerOtpScreen() {
                 />
               </View>
               <View>
-                <Text style={styles.fieldLabel}>Name (Optional)</Text>
+                <Text style={styles.fieldLabel}>{t("otpNameField")}</Text>
                 <TextInput
                   value={displayName}
                   onChangeText={setDisplayName}
-                  placeholder="What should FarmPal call you?"
+                  placeholder={t("otpNamePlaceholder")}
                   placeholderTextColor={colors.mutedForeground}
                   autoCapitalize="words"
                   style={styles.input}
@@ -319,18 +343,18 @@ export default function FarmerOtpScreen() {
                 {requesting ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.buttonText}>Send OTP</Text>
+                  <Text style={styles.buttonText}>{t("otpSendButton")}</Text>
                 )}
               </Pressable>
             </>
           ) : (
             <>
               <View>
-                <Text style={styles.fieldLabel}>OTP Code</Text>
+                <Text style={styles.fieldLabel}>{t("otpCodeField")}</Text>
                 <TextInput
                   value={code}
                   onChangeText={setCode}
-                  placeholder="Enter the 6-digit code"
+                  placeholder={t("otpCodePlaceholder")}
                   placeholderTextColor={colors.mutedForeground}
                   keyboardType="number-pad"
                   autoCapitalize="none"
@@ -343,7 +367,7 @@ export default function FarmerOtpScreen() {
                 <View style={styles.hintRow}>
                   <Feather name="tool" size={14} color={colors.primary} />
                   <Text style={styles.hintText}>
-                    Development mode is active, so the OTP is shown here instead of sent by SMS.
+                    {t("otpDevModeHint")}
                   </Text>
                 </View>
               ) : null}
@@ -352,7 +376,7 @@ export default function FarmerOtpScreen() {
                 {verifying ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.buttonText}>Verify and Continue</Text>
+                  <Text style={styles.buttonText}>{t("otpVerifyButton")}</Text>
                 )}
               </Pressable>
 
@@ -365,7 +389,7 @@ export default function FarmerOtpScreen() {
                   setInfo(null);
                 }}
               >
-                <Text style={styles.buttonSecondaryText}>Change phone number</Text>
+                <Text style={styles.buttonSecondaryText}>{t("otpChangePhone")}</Text>
               </Pressable>
             </>
           )}

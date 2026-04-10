@@ -218,6 +218,7 @@ export interface WeatherStats {
 export interface TrackedLocation {
   id: number;
   name: string;
+  villageName?: string | null;
   latitude: number;
   longitude: number;
   active: boolean;
@@ -234,6 +235,7 @@ export interface AddLocationRequest {
    * @maxLength 100
    */
   name: string;
+  villageName?: string;
   /**
    * @minimum -90
    * @maximum 90

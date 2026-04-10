@@ -13,6 +13,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   KENYA_COUNTIES,
   searchLocations,
@@ -43,6 +44,7 @@ type Step = "county" | "sub" | "town" | "search";
 export default function KenyaLocationPicker({ visible, onClose, onSelect }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { t, tf } = useLanguage();
 
   const [step, setStep] = useState<Step>("county");
   const [searchQuery, setSearchQuery] = useState("");
@@ -77,7 +79,7 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
     if (!selectedCounty || !selectedSub) return;
     onSelect({
       name: `${town.name}, ${selectedSub.name}, ${selectedCounty.name}`,
-      displayName: `${town.name} · ${selectedSub.name} · ${selectedCounty.name}`,
+      displayName: `${town.name} - ${selectedSub.name} - ${selectedCounty.name}`,
       lat: town.lat,
       lon: town.lon,
       county: selectedCounty.name,
@@ -117,7 +119,7 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
     if (!selectedCounty) return;
     onSelect({
       name: `${sub.name}, ${selectedCounty.name}`,
-      displayName: `${sub.name} · ${selectedCounty.name}`,
+      displayName: `${sub.name} - ${selectedCounty.name}`,
       lat: sub.lat,
       lon: sub.lon,
       county: selectedCounty.name,
@@ -235,12 +237,12 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
 
   const title =
     step === "search"
-      ? "Search All Kenya"
+      ? t("pickerSearchAllKenya")
       : step === "county"
-      ? "Select County"
+      ? t("pickerSelectCounty")
       : step === "sub"
-      ? `${selectedCounty?.name} · Sub-County`
-      : `${selectedSub?.name} · Select Town/Ward`;
+      ? tf("pickerSubCountyTitle", { county: selectedCounty?.name ?? "" })
+      : tf("pickerTownTitle", { subCounty: selectedSub?.name ?? "" });
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={resetAndClose}>
@@ -281,7 +283,7 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
               }}
             >
               <Text style={[s.modeBtnText, { color: step !== "search" ? colors.primary : colors.mutedForeground }]}>
-                Browse
+                {t("pickerBrowse")}
               </Text>
             </Pressable>
             <Pressable
@@ -295,7 +297,7 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
               onPress={() => setStep("search")}
             >
               <Text style={[s.modeBtnText, { color: step === "search" ? colors.primary : colors.mutedForeground }]}>
-                Search
+                {t("pickerSearch")}
               </Text>
             </Pressable>
           </View>
@@ -306,7 +308,7 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
               <Feather name="search" size={16} color={colors.mutedForeground} />
               <TextInput
                 style={s.searchInput}
-                placeholder="Search county, town, ward..."
+                placeholder={t("pickerSearchPlaceholder")}
                 placeholderTextColor={colors.mutedForeground}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -320,11 +322,11 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
           {step !== "search" && (selectedCounty || selectedSub) && (
             <View style={s.breadcrumb}>
               <Pressable onPress={() => { setStep("county"); setSelectedCounty(null); setSelectedSub(null); }}>
-                <Text style={[s.breadcrumbText, step === "county" && s.breadcrumbActive]}>Kenya</Text>
+                <Text style={[s.breadcrumbText, step === "county" && s.breadcrumbActive]}>{t("pickerKenya")}</Text>
               </Pressable>
               {selectedCounty && (
                 <>
-                  <Text style={s.breadcrumbSep}>›</Text>
+                  <Text style={s.breadcrumbSep}>{">"}</Text>
                   <Pressable onPress={() => { setStep("sub"); setSelectedSub(null); }}>
                     <Text style={[s.breadcrumbText, step === "sub" && s.breadcrumbActive]}>
                       {selectedCounty.name}
@@ -334,7 +336,7 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
               )}
               {selectedSub && (
                 <>
-                  <Text style={s.breadcrumbSep}>›</Text>
+                  <Text style={s.breadcrumbSep}>{">"}</Text>
                   <Text style={[s.breadcrumbText, s.breadcrumbActive]}>{selectedSub.name}</Text>
                 </>
               )}
@@ -360,7 +362,9 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={s.itemText}>{county.name}</Text>
-                        <Text style={s.itemSub}>{county.subCounties.length} sub-counties · hold to use county center</Text>
+                        <Text style={s.itemSub}>
+                          {tf("pickerUseCountyCenter", { count: county.subCounties.length })}
+                        </Text>
                       </View>
                       <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
                     </Pressable>
@@ -383,7 +387,9 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={s.itemText}>{sub.name}</Text>
-                    <Text style={s.itemSub}>{sub.towns.length} towns/wards · hold to use sub-county center</Text>
+                    <Text style={s.itemSub}>
+                      {tf("pickerUseSubCountyCenter", { count: sub.towns.length })}
+                    </Text>
                   </View>
                   <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
                 </Pressable>
@@ -403,7 +409,7 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
                     <Text style={s.itemSub}>{town.lat.toFixed(4)}, {town.lon.toFixed(4)}</Text>
                   </View>
                   <Pressable style={s.pinUseBtn} onPress={() => handleTownSelect(town)}>
-                    <Text style={s.pinUseBtnText}>Select</Text>
+                    <Text style={s.pinUseBtnText}>{t("pickerSelect")}</Text>
                   </Pressable>
                 </Pressable>
               )}
@@ -419,16 +425,16 @@ export default function KenyaLocationPicker({ visible, onClose, onSelect }: Prop
                 <Pressable style={s.item} onPress={() => handleSearchResult(r)}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.itemText}>{r.town}</Text>
-                    <Text style={s.itemSub}>{r.subCounty} · {r.county}</Text>
+                    <Text style={s.itemSub}>{r.subCounty} - {r.county}</Text>
                   </View>
                   <Text style={s.itemSub}>{r.lat.toFixed(3)}, {r.lon.toFixed(3)}</Text>
                 </Pressable>
               )}
               ListEmptyComponent={
                 searchQuery.length > 1 ? (
-                  <Text style={s.emptyText}>No results for "{searchQuery}"</Text>
+                  <Text style={s.emptyText}>{tf("pickerNoResults", { query: searchQuery })}</Text>
                 ) : (
-                  <Text style={s.emptyText}>Type to search towns, wards or counties…</Text>
+                  <Text style={s.emptyText}>{t("pickerTypeToSearch")}</Text>
                 )
               }
               showsVerticalScrollIndicator={false}

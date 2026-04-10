@@ -16,6 +16,7 @@ import {
   getFarmerSession,
   logoutFarmer,
   requestFarmerOtp,
+  updateFarmerProfile as updateFarmerProfileRequest,
   type FarmerAuthStatus,
   type FarmerIdentity,
   type RequestOtpResponse,
@@ -31,6 +32,7 @@ interface FarmerSessionContextValue {
   authStatus: FarmerAuthStatus | null;
   requestOtp: (input: { phoneNumber: string; displayName?: string }) => Promise<RequestOtpResponse>;
   verifyOtp: (input: { phoneNumber: string; code: string; displayName?: string }) => Promise<void>;
+  updateProfile: (input: { displayName?: string; villageName?: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -57,6 +59,7 @@ export function FarmerSessionProvider({ children }: { children: ReactNode }) {
         startTransition(() => {
           setToken(storedToken);
           setHydrated(true);
+          setStatus(storedToken ? "authenticated" : "unauthenticated");
         });
       })
       .catch(() => {
@@ -88,7 +91,6 @@ export function FarmerSessionProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
-    setStatus("checking");
 
     getFarmerSession()
       .then((session) => {
@@ -160,7 +162,19 @@ export function FarmerSessionProvider({ children }: { children: ReactNode }) {
     startTransition(() => {
       setToken(result.token);
       setFarmer(result.farmer);
+      setAuthStatus(result.auth ?? null);
       setStatus("authenticated");
+    });
+  }
+
+  async function updateProfileAction(input: {
+    displayName?: string;
+    villageName?: string;
+  }): Promise<void> {
+    const result = await updateFarmerProfileRequest(input);
+    startTransition(() => {
+      setFarmer(result.farmer);
+      setAuthStatus(result.auth);
     });
   }
 
@@ -190,6 +204,7 @@ export function FarmerSessionProvider({ children }: { children: ReactNode }) {
     authStatus,
     requestOtp: requestOtpAction,
     verifyOtp: verifyOtpAction,
+    updateProfile: updateProfileAction,
     logout: logoutAction,
   }), [authStatus, farmer, status, token]);
 

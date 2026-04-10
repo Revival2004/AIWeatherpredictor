@@ -14,6 +14,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { customFetch } from "@/lib/api-client/custom-fetch";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface CommunityData {
   farmerCount: number;
@@ -35,6 +36,7 @@ interface Props {
 
 export default function CommunityInsightCard({ lat, lon }: Props) {
   const colors = useColors();
+  const { t, tf } = useLanguage();
   const [data, setData] = useState<CommunityData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -70,10 +72,9 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
             <Feather name="users" size={16} color="#3D8B37" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: colors.foreground }]}>Your Zone</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>{t("zoneEmptyTitle")}</Text>
             <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-              You're the first farmer using FarmPal in this area.{"\n"}
-              Your reports will build the local model for everyone nearby.
+              {t("zoneEmptySubtitle")}
             </Text>
           </View>
         </View>
@@ -100,10 +101,14 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: colors.foreground }]}>
-            {farmerCount} farmer{farmerCount !== 1 ? "s" : ""} in your zone
+            {tf("zoneFarmersTitle", { count: farmerCount })}
           </Text>
           <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-            Within {zoneRadiusKm} km - {feedbackCount} reports and {data.sharedWeatherSamples ?? 0} shared readings
+            {tf("zoneFarmersSubtitle", {
+              radius: zoneRadiusKm,
+              reports: feedbackCount,
+              samples: data.sharedWeatherSamples ?? 0,
+            })}
           </Text>
         </View>
 
@@ -111,7 +116,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
         {communityBoost && (
           <View style={styles.boostBadge}>
             <Feather name="zap" size={10} color="#3D8B37" />
-            <Text style={styles.boostText}>Boosted</Text>
+            <Text style={styles.boostText}>{t("communityBoosted")}</Text>
           </View>
         )}
       </View>
@@ -122,14 +127,14 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <View style={styles.reportRow}>
             <Text style={[styles.reportLabel, { color: colors.mutedForeground }]}>
-              PAST 24H NEARBY REPORTS
+              {t("nearbyReportsLabel")}
             </Text>
             <View style={styles.pills}>
               {recentReports.rain > 0 && (
                 <View style={[styles.pill, { backgroundColor: "#EFF6FF" }]}>
                   <Feather name="cloud-rain" size={12} color="#2563EB" />
                   <Text style={[styles.pillText, { color: "#2563EB" }]}>
-                    {recentReports.rain} rain
+                    {tf("rainReportsLabel", { count: recentReports.rain })}
                   </Text>
                 </View>
               )}
@@ -137,7 +142,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
                 <View style={[styles.pill, { backgroundColor: "#F0FDF4" }]}>
                   <Feather name="sun" size={12} color="#15803D" />
                   <Text style={[styles.pillText, { color: "#15803D" }]}>
-                    {recentReports.dry} dry
+                    {tf("dryReportsLabel", { count: recentReports.dry })}
                   </Text>
                 </View>
               )}
@@ -145,7 +150,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
                 <View style={[styles.pill, { backgroundColor: "#F8F8F8" }]}>
                   <Feather name="cloud" size={12} color="#6B7280" />
                   <Text style={[styles.pillText, { color: "#6B7280" }]}>
-                    {recentReports.cloudy} cloudy
+                    {tf("cloudyReportsLabel", { count: recentReports.cloudy })}
                   </Text>
                 </View>
               )}
@@ -162,8 +167,8 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
               />
               <Text style={[styles.consensusText, { color: dominantCondition === "rain" ? "#2563EB" : "#15803D" }]}>
                 {dominantCondition === "rain"
-                  ? `Most farmers nearby reported rain in the last 24h`
-                  : `Most farmers nearby reported dry conditions in the last 24h`}
+                  ? t("communityMostlyRain")
+                  : t("communityMostlyDry")}
               </Text>
             </View>
           )}
@@ -208,10 +213,10 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
             ]}
           >
             {data.signalDirection === "wetter"
-              ? "Regional farmer data is nudging forecasts wetter in this zone."
+              ? t("communityNudgeWetter")
               : data.signalDirection === "drier"
-              ? "Regional farmer data is nudging forecasts drier in this zone."
-              : "Regional farmer data is mixed, so FarmPal is blending it carefully."}
+              ? t("communityNudgeDrier")
+              : t("communityNudgeMixed")}
           </Text>
         </View>
       ) : null}
@@ -221,7 +226,7 @@ export default function CommunityInsightCard({ lat, lon }: Props) {
         <View style={styles.accuracyRow}>
           <Feather name="target" size={11} color={colors.mutedForeground} />
           <Text style={[styles.accuracyText, { color: colors.mutedForeground }]}>
-            Zone prediction accuracy: {zoneAccuracy}%
+            {tf("zoneAccuracyLabel", { accuracy: zoneAccuracy })}
           </Text>
         </View>
       )}

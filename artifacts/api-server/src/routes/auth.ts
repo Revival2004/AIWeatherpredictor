@@ -4,7 +4,9 @@ import { z } from "zod";
 import {
   getFarmerAuthStatus,
   getFarmerSessionIdentity,
+  requireFarmerAuth,
   requestFarmerOtp,
+  updateFarmerSessionProfile,
   verifyFarmerOtp,
 } from "../lib/farmerAuth.js";
 import { getBearerToken } from "../lib/adminAuth.js";
@@ -21,6 +23,15 @@ const verifyOtpSchema = z.object({
   code: z.string().min(4).max(8),
   displayName: z.string().min(1).max(80).optional(),
 });
+
+const updateProfileSchema = z
+  .object({
+    displayName: z.string().trim().max(80).optional(),
+    villageName: z.string().trim().max(80).optional(),
+  })
+  .refine((value) => value.displayName !== undefined || value.villageName !== undefined, {
+    message: "Provide at least one profile field to update.",
+  });
 
 function authErrorStatus(error: unknown): number {
   return typeof error === "object" && error !== null && "status" in error && typeof error.status === "number"
@@ -63,6 +74,7 @@ router.post("/auth/verify-otp", async (req, res): Promise<void> => {
     res.json({
       ...result,
       authenticated: true,
+      auth: getFarmerAuthStatus(),
     });
   } catch (error) {
     res.status(authErrorStatus(error)).json({ error: authErrorMessage(error) });
@@ -88,6 +100,38 @@ router.get("/auth/session", async (req, res): Promise<void> => {
   } catch (error) {
     res.status(500).json({ error: authErrorMessage(error) });
   }
+});
+
+router.put("/auth/profile", requireFarmerAuth, async (req, res): Promise<void> => {
+  const parsed = updateProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const farmerSession = (req as typeof req & { farmerSession?: { id: number } }).farmerSession;
+  if (!farmerSession) {
+    res.status(401).json({ error: "Farmer authentication required." });
+    return;
+  }
+
+  const farmer = await updateFarmerSessionProfile(farmerSession.id, {
+    displayName:
+      parsed.data.displayName === undefined ? undefined : parsed.data.displayName.trim() || null,
+    villageName:
+      parsed.data.villageName === undefined ? undefined : parsed.data.villageName.trim() || null,
+  });
+
+  if (!farmer) {
+    res.status(404).json({ error: "Farmer profile not found." });
+    return;
+  }
+
+  res.json({
+    updated: true,
+    farmer,
+    auth: getFarmerAuthStatus(),
+  });
 });
 
 router.post("/auth/logout", (_req, res) => {

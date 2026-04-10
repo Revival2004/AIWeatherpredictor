@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { WeatherStats } from "@/lib/api-client";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface StatsPanelProps {
   stats: WeatherStats | undefined;
@@ -119,6 +120,7 @@ function ConditionBar({ label, count, maxCount }: ConditionBarProps) {
 
 export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
   const colors = useColors();
+  const { t } = useLanguage();
   const DEGREE = "\u00B0";
 
   if (isLoading || !stats) {
@@ -133,7 +135,7 @@ export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
             fontSize: 14,
           }}
         >
-          {isLoading ? "Loading statistics..." : "No data yet - fetch weather to get started"}
+          {isLoading ? t("panelLoading") : t("panelEmpty")}
         </Text>
       </View>
     );
@@ -156,28 +158,28 @@ export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
       >
         <StatTile
           icon="thermometer"
-          label="Avg Temperature"
+          label={t("statsAvgTemperature")}
           value={stats.avgTemperature != null ? `${Math.round(stats.avgTemperature)}${DEGREE}C` : "--"}
           iconColor="#E65100"
           bgColor="#FFF3E0"
         />
         <StatTile
           icon="droplet"
-          label="Avg Humidity"
+          label={t("statsAvgHumidity")}
           value={stats.avgHumidity != null ? `${Math.round(stats.avgHumidity)}%` : "--"}
           iconColor="#1565C0"
           bgColor="#E3F2FD"
         />
         <StatTile
           icon="wind"
-          label="Avg Wind"
+          label={t("statsAvgWind")}
           value={stats.avgWindspeed != null ? `${Math.round(stats.avgWindspeed)} km/h` : "--"}
           iconColor={colors.primary}
           bgColor={`${colors.primary}18`}
         />
         <StatTile
           icon="database"
-          label="Total Readings"
+          label={t("statsTotalReadings")}
           value={`${stats.totalReadings ?? 0}`}
           iconColor={colors.secondary}
           bgColor={`${colors.secondary}18`}
@@ -204,7 +206,7 @@ export function StatsPanel({ stats, isLoading }: StatsPanelProps) {
               marginBottom: 14,
             }}
           >
-            PREDICTION BREAKDOWN
+            {t("statsPredictionBreakdown")}
           </Text>
           {condEntries.map(([pred, count]) => (
             <ConditionBar key={pred} label={pred} count={count} maxCount={maxCount} />

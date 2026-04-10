@@ -3,7 +3,12 @@ import type { NextFunction, Request, Response } from "express";
 
 import type { AdminSession } from "./adminAuth.js";
 import { getAdminSessionFromToken, getBearerToken } from "./adminAuth.js";
-import { getFarmerProfileById, upsertFarmerProfile, type FarmerProfile } from "./store.js";
+import {
+  getFarmerProfileById,
+  upsertFarmerProfile,
+  updateFarmerProfile,
+  type FarmerProfile,
+} from "./store.js";
 
 const isProduction = process.env.NODE_ENV === "production";
 const defaultSecret = "farmpal-local-farmer-secret";
@@ -28,6 +33,7 @@ export interface FarmerIdentity {
   id: number;
   phoneNumber: string;
   displayName: string | null;
+  villageName: string | null;
 }
 
 export interface FarmerSession extends FarmerIdentity {
@@ -143,7 +149,7 @@ function verifyDevChallenge(phoneNumber: string, code: string): { ok: true; disp
   }
 
   if (challenge.code !== code) {
-    throw new FarmerAuthError(401, "The OTP code is not valid.");
+    throw new FarmerAuthError(401, "Wrong OTP entered.");
   }
 
   devChallenges.delete(phoneNumber);
@@ -225,6 +231,7 @@ async function ensureFarmerIdentity(phoneNumber: string, displayName?: string | 
     id: farmer.id,
     phoneNumber: farmer.phoneNumber,
     displayName: farmer.displayName,
+    villageName: farmer.villageName,
   };
 }
 
@@ -239,8 +246,11 @@ export async function verifyFarmerOtp(input: {
   }
 
   const code = input.code.trim();
+  if (!code) {
+    throw new FarmerAuthError(400, "Please enter the sent OTP.");
+  }
   if (!/^\d{4,8}$/.test(code)) {
-    throw new FarmerAuthError(400, "Enter the OTP code you received.");
+    throw new FarmerAuthError(400, "Wrong OTP entered.");
   }
 
   const deliveryMode = getDeliveryMode();
@@ -261,7 +271,7 @@ export async function verifyFarmerOtp(input: {
       Code: code,
     });
     if (verification.status !== "approved") {
-      throw new FarmerAuthError(401, "The OTP code is not valid.");
+      throw new FarmerAuthError(401, "Wrong OTP entered.");
     }
   }
 
@@ -323,6 +333,24 @@ export async function getFarmerSessionIdentity(token: string | null | undefined)
     id: farmer.id,
     phoneNumber: farmer.phoneNumber,
     displayName: farmer.displayName,
+    villageName: farmer.villageName,
+  };
+}
+
+export async function updateFarmerSessionProfile(
+  id: number,
+  patch: { displayName?: string | null; villageName?: string | null },
+): Promise<FarmerIdentity | null> {
+  const farmer = await updateFarmerProfile(id, patch);
+  if (!farmer) {
+    return null;
+  }
+
+  return {
+    id: farmer.id,
+    phoneNumber: farmer.phoneNumber,
+    displayName: farmer.displayName,
+    villageName: farmer.villageName,
   };
 }
 

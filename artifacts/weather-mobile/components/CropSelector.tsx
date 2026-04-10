@@ -12,6 +12,7 @@ import {
 import { useColorScheme } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import colorTokens from "@/constants/colors";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export const CROPS = [
   { name: "General", icon: "🌱", frostThreshold: 0, heatThreshold: 38, gddBase: 10 },
@@ -33,13 +34,50 @@ interface CropSelectorProps {
   onSelect: (cropName: string) => void;
 }
 
+const CROP_LABELS = {
+  General: { en: "Any crop", sw: "Zao lolote", ki: "Mũmera o wothe" },
+  Corn: { en: "Maize", sw: "Mahindi", ki: "Mbembe" },
+  Wheat: { en: "Wheat", sw: "Ngano", ki: "Ngano" },
+  Tomatoes: { en: "Tomatoes", sw: "Nyanya", ki: "Nyanya" },
+  Potatoes: { en: "Potatoes", sw: "Viazi", ki: "Matuma" },
+  Grapes: { en: "Grapes", sw: "Zabibu", ki: "Zabibu" },
+  Rice: { en: "Rice", sw: "Mchele", ki: "Mũchele" },
+  Lettuce: { en: "Lettuce", sw: "Saladi", ki: "Saladi" },
+  Cotton: { en: "Cotton", sw: "Pamba", ki: "Pamba" },
+  Soybeans: { en: "Soybeans", sw: "Soya", ki: "Soya" },
+  Citrus: { en: "Citrus", sw: "Machungwa", ki: "Machungwa" },
+  Sunflower: { en: "Sunflower", sw: "Alizeti", ki: "Alizeti" },
+} as const;
+
 export default function CropSelector({ selectedCrop, onSelect }: CropSelectorProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = useColors();
+  const { language } = useLanguage();
   const [modalVisible, setModalVisible] = useState(false);
 
   const current = CROPS.find((c) => c.name === selectedCrop) ?? CROPS[0];
+  const copy = {
+    en: {
+      trigger: "YOUR MAIN CROP",
+      title: "Choose your crop",
+      subtitle: "FarmPal uses this to explain weather and season advice in a way that fits your crop.",
+      coldLimit: "Cold limit",
+    },
+    sw: {
+      trigger: "ZAO LAKO KUU",
+      title: "Chagua zao lako",
+      subtitle: "FarmPal hutumia hili kueleza hali ya hewa na msimu kwa njia inayolingana na zao lako.",
+      coldLimit: "Kiwango cha baridi",
+    },
+    ki: {
+      trigger: "MŨMERA WAKO MŨNENE",
+      title: "Thuuria mũmera wako",
+      subtitle: "FarmPal irutaga ũhoro wa mbura na mũaka na njĩra ĩrĩ hamwe na mũmera wako.",
+      coldLimit: "Ũrĩa wa mbeho",
+    },
+  } as const;
+  const cropName = (name: string) => CROP_LABELS[name as keyof typeof CROP_LABELS]?.[language] ?? name;
 
   return (
     <>
@@ -50,8 +88,8 @@ export default function CropSelector({ selectedCrop, onSelect }: CropSelectorPro
       >
         <Text style={styles.cropIcon}>{current.icon}</Text>
         <View>
-          <Text style={[styles.triggerLabel, { color: colors.mutedForeground }]}>YOUR CROP</Text>
-          <Text style={[styles.triggerValue, { color: colors.text }]}>{current.name}</Text>
+          <Text style={[styles.triggerLabel, { color: colors.mutedForeground }]}>{copy[language].trigger}</Text>
+          <Text style={[styles.triggerValue, { color: colors.text }]}>{cropName(current.name)}</Text>
         </View>
         <Text style={[styles.chevron, { color: colorTokens.light.primary }]}>▼</Text>
       </TouchableOpacity>
@@ -65,9 +103,9 @@ export default function CropSelector({ selectedCrop, onSelect }: CropSelectorPro
         <Pressable style={styles.overlay} onPress={() => setModalVisible(false)}>
           <Pressable style={[styles.sheet, { backgroundColor: isDark ? colors.card : "#FFFFFF" }]} onPress={() => {}}>
             <View style={styles.sheetHandle} />
-            <Text style={[styles.sheetTitle, { color: colors.text }]}>Select Your Crop</Text>
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>{copy[language].title}</Text>
             <Text style={[styles.sheetSubtitle, { color: colors.mutedForeground }]}>
-              Alerts and recommendations will be tailored to your selected crop
+              {copy[language].subtitle}
             </Text>
 
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -90,7 +128,7 @@ export default function CropSelector({ selectedCrop, onSelect }: CropSelectorPro
                     }}
                   >
                     <Text style={styles.cropCardIcon}>{crop.icon}</Text>
-                    <Text style={[styles.cropCardName, { color: colors.text }]}>{crop.name}</Text>
+                    <Text style={[styles.cropCardName, { color: colors.text }]}>{cropName(crop.name)}</Text>
                     <Text style={[styles.cropCardMeta, { color: colors.mutedForeground }]}>
                       Frost: {crop.frostThreshold}°C
                     </Text>

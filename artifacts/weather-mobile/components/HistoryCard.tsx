@@ -4,25 +4,29 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { WeatherRecord } from "@/lib/api-client";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface HistoryCardProps {
   record: WeatherRecord;
 }
 
-function wmoCondition(code: number): string {
-  if (code === 0) return "Clear Sky";
-  if (code <= 3) return "Partly Cloudy";
-  if (code <= 9) return "Fog";
-  if (code <= 19) return "Drizzle";
-  if (code <= 29) return "Rain";
-  if (code <= 39) return "Snow";
-  if (code <= 49) return "Fog";
-  if (code <= 59) return "Drizzle";
-  if (code <= 69) return "Rain";
-  if (code <= 79) return "Snow";
-  if (code <= 84) return "Rain Showers";
-  if (code <= 94) return "Snow Showers";
-  return "Thunderstorm";
+function wmoCondition(
+  code: number,
+  t: (key: "weatherClear" | "weatherPartlyCloudy" | "weatherFog" | "weatherDrizzle" | "weatherRain" | "weatherSnow" | "weatherRainShowers" | "weatherSnowShowers" | "weatherStormRisk") => string,
+): string {
+  if (code === 0) return t("weatherClear");
+  if (code <= 3) return t("weatherPartlyCloudy");
+  if (code <= 9) return t("weatherFog");
+  if (code <= 19) return t("weatherDrizzle");
+  if (code <= 29) return t("weatherRain");
+  if (code <= 39) return t("weatherSnow");
+  if (code <= 49) return t("weatherFog");
+  if (code <= 59) return t("weatherDrizzle");
+  if (code <= 69) return t("weatherRain");
+  if (code <= 79) return t("weatherSnow");
+  if (code <= 84) return t("weatherRainShowers");
+  if (code <= 94) return t("weatherSnowShowers");
+  return t("weatherStormRisk");
 }
 
 function wmoIcon(code: number): keyof typeof Feather.glyphMap {
@@ -66,10 +70,11 @@ function formatDate(dateStr: string) {
 
 export function HistoryCard({ record }: HistoryCardProps) {
   const colors = useColors();
+  const { t } = useLanguage();
   const code = record.weathercode ?? 0;
   const iconColor = wmoColor(code);
   const iconName = wmoIcon(code);
-  const conditionStr = wmoCondition(code);
+  const conditionStr = wmoCondition(code, t);
 
   const styles = StyleSheet.create({
     card: {

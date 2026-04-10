@@ -4,6 +4,7 @@ export interface FarmerProfile {
   id: number;
   phoneNumber: string;
   displayName: string | null;
+  villageName: string | null;
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -12,6 +13,7 @@ export interface FarmerProfile {
 export interface TrackedLocation {
   id: number;
   name: string;
+  villageName: string | null;
   latitude: number;
   longitude: number;
   elevation: number | null;
@@ -162,6 +164,7 @@ function mapLocationRow(row: Record<string, unknown>): TrackedLocation {
   return {
     id: toNumber(row.id),
     name: String(row.name),
+    villageName: row.village_name === null || row.village_name === undefined ? null : String(row.village_name),
     latitude: toNumber(row.latitude),
     longitude: toNumber(row.longitude),
     elevation: row.elevation === null ? null : toNumber(row.elevation),
@@ -179,6 +182,7 @@ function mapFarmerRow(row: Record<string, unknown>): FarmerProfile {
     id: toNumber(row.id),
     phoneNumber: String(row.phone_number),
     displayName: row.display_name === null ? null : String(row.display_name),
+    villageName: row.village_name === null || row.village_name === undefined ? null : String(row.village_name),
     lastLoginAt: row.last_login_at ? toDate(row.last_login_at) : null,
     createdAt: toDate(row.created_at),
     updatedAt: row.updated_at ? toDate(row.updated_at) : toDate(row.created_at),
@@ -238,6 +242,7 @@ async function ensureSchema(): Promise<void> {
       id SERIAL PRIMARY KEY,
       phone_number TEXT NOT NULL UNIQUE,
       display_name TEXT,
+      village_name TEXT,
       last_login_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -249,6 +254,7 @@ async function ensureSchema(): Promise<void> {
       id SERIAL PRIMARY KEY,
       farmer_id INTEGER REFERENCES farmer_profiles(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
+      village_name TEXT,
       latitude DOUBLE PRECISION NOT NULL,
       longitude DOUBLE PRECISION NOT NULL,
       active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -310,12 +316,20 @@ async function ensureSchema(): Promise<void> {
   `);
 
   await db.query(`
+    ALTER TABLE farmer_profiles
+    ADD COLUMN IF NOT EXISTS village_name TEXT;
+  `);
+  await db.query(`
     ALTER TABLE tracked_locations
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
   `);
   await db.query(`
     ALTER TABLE tracked_locations
     ADD COLUMN IF NOT EXISTS farmer_id INTEGER REFERENCES farmer_profiles(id) ON DELETE CASCADE;
+  `);
+  await db.query(`
+    ALTER TABLE tracked_locations
+    ADD COLUMN IF NOT EXISTS village_name TEXT;
   `);
   await db.query(`
     ALTER TABLE farmer_feedback
@@ -376,11 +390,13 @@ export function getStoreHealth(): StoreHealth {
 export async function upsertFarmerProfile(input: {
   phoneNumber: string;
   displayName?: string | null;
+  villageName?: string | null;
 }): Promise<FarmerProfile> {
   if (STORE_MODE === "memory") {
     const existing = state.farmers.find((entry) => entry.phoneNumber === input.phoneNumber);
     if (existing) {
       existing.displayName = input.displayName ?? existing.displayName;
+      existing.villageName = input.villageName ?? existing.villageName;
       existing.lastLoginAt = new Date();
       existing.updatedAt = new Date();
       return { ...existing };
@@ -391,6 +407,7 @@ export async function upsertFarmerProfile(input: {
       id: counters.farmer++,
       phoneNumber: input.phoneNumber,
       displayName: input.displayName ?? null,
+      villageName: input.villageName ?? null,
       lastLoginAt: now,
       createdAt: now,
       updatedAt: now,
@@ -401,19 +418,71 @@ export async function upsertFarmerProfile(input: {
 
   const result = await getPool().query(
     `
-      INSERT INTO farmer_profiles (phone_number, display_name, last_login_at)
-      VALUES ($1, $2, NOW())
+      INSERT INTO farmer_profiles (phone_number, display_name, village_name, last_login_at)
+      VALUES ($1, $2, $3, NOW())
       ON CONFLICT (phone_number)
       DO UPDATE SET
         display_name = COALESCE(EXCLUDED.display_name, farmer_profiles.display_name),
+        village_name = COALESCE(EXCLUDED.village_name, farmer_profiles.village_name),
         last_login_at = NOW(),
         updated_at = NOW()
       RETURNING *;
     `,
-    [input.phoneNumber, input.displayName ?? null],
+    [input.phoneNumber, input.displayName ?? null, input.villageName ?? null],
   );
 
   return mapFarmerRow(result.rows[0] as Record<string, unknown>);
+}
+
+export async function updateFarmerProfile(
+  id: number,
+  patch: { displayName?: string | null; villageName?: string | null },
+): Promise<FarmerProfile | null> {
+  if (STORE_MODE === "memory") {
+    const farmer = state.farmers.find((entry) => entry.id === id);
+    if (!farmer) {
+      return null;
+    }
+
+    if (patch.displayName !== undefined) {
+      farmer.displayName = patch.displayName;
+    }
+    if (patch.villageName !== undefined) {
+      farmer.villageName = patch.villageName;
+    }
+    farmer.updatedAt = new Date();
+    return { ...farmer };
+  }
+
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (patch.displayName !== undefined) {
+    values.push(patch.displayName);
+    fields.push(`display_name = $${values.length}`);
+  }
+
+  if (patch.villageName !== undefined) {
+    values.push(patch.villageName);
+    fields.push(`village_name = $${values.length}`);
+  }
+
+  if (fields.length === 0) {
+    return getFarmerProfileById(id);
+  }
+
+  values.push(id);
+  const result = await getPool().query(
+    `
+      UPDATE farmer_profiles
+      SET ${fields.join(", ")}, updated_at = NOW()
+      WHERE id = $${values.length}
+      RETURNING *;
+    `,
+    values,
+  );
+
+  return result.rowCount ? mapFarmerRow(result.rows[0] as Record<string, unknown>) : null;
 }
 
 export async function getFarmerProfileById(id: number): Promise<FarmerProfile | null> {
@@ -444,6 +513,7 @@ export async function getFarmerProfileByPhoneNumber(phoneNumber: string): Promis
 
 export async function addLocationRecord(input: {
   name: string;
+  villageName?: string | null;
   latitude: number;
   longitude: number;
   elevation?: number | null;
@@ -457,6 +527,7 @@ export async function addLocationRecord(input: {
     const location: TrackedLocation = {
       id: counters.location++,
       name: input.name,
+      villageName: input.villageName ?? null,
       latitude: input.latitude,
       longitude: input.longitude,
       elevation: input.elevation ?? null,
@@ -474,14 +545,15 @@ export async function addLocationRecord(input: {
   const result = await getPool().query(
     `
       INSERT INTO tracked_locations
-        (farmer_id, name, latitude, longitude, elevation, crop_type, planting_date, active)
+        (farmer_id, name, village_name, latitude, longitude, elevation, crop_type, planting_date, active)
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, TRUE))
+        ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, TRUE))
       RETURNING *;
     `,
     [
       input.farmerId ?? null,
       input.name,
+      input.villageName ?? null,
       input.latitude,
       input.longitude,
       input.elevation ?? null,
@@ -582,6 +654,7 @@ export async function updateLocationRecord(
   if (patch.elevation !== undefined) addField("elevation", patch.elevation);
   if (patch.cropType !== undefined) addField("crop_type", patch.cropType);
   if (patch.plantingDate !== undefined) addField("planting_date", patch.plantingDate);
+  if (patch.villageName !== undefined) addField("village_name", patch.villageName);
   if (patch.active !== undefined) addField("active", patch.active);
   if (patch.name !== undefined) addField("name", patch.name);
   if (patch.latitude !== undefined) addField("latitude", patch.latitude);

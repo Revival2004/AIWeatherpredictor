@@ -15,7 +15,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 // Module-level configuration
 // ---------------------------------------------------------------------------
 
-let _baseUrl: string | null = "https://farmpal-api.onrender.com";
+let _baseUrl: string | null = "https://farmpal-api-gxv9.onrender.com";
 let _authTokenGetter: AuthTokenGetter | null = null;
 
 /**
