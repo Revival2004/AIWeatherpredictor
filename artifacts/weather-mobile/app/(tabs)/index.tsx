@@ -41,7 +41,6 @@ import {
   type RainPredictionResponse,
 } from "@/lib/api-client";
 import DecisionAssistantCard from "@/components/DecisionAssistantCard";
-import PlantingAdvisoryCard from "@/components/PlantingAdvisoryCardClean";
 import AlertsBanner from "@/components/AlertsBannerClean";
 import CommunityInsightCard from "@/components/CommunityInsightCard";
 import TodayTimeline from "@/components/TodayTimeline";
@@ -385,6 +384,7 @@ export default function DashboardScreen() {
     },
   });
   const currentVillageName = farmer?.villageName?.trim() || null;
+  const farmerFirstName = farmer?.displayName?.trim()?.split(/\s+/)[0] || null;
   const trackedFarmLabel = (loc: TrackedLocation) => loc.villageName?.trim() || loc.name;
   const currentLocationSummary = currentVillageName
     ? ({
@@ -773,6 +773,13 @@ export default function DashboardScreen() {
     : locationLabel
     ? tf("viewingSavedFarm", { name: locationLabel })
     : t("homeSubtitle");
+  const greetingTitle = farmerFirstName
+    ? ({
+        en: `Welcome ${farmerFirstName}`,
+        sw: `Karibu ${farmerFirstName}`,
+        ki: `Karibu ${farmerFirstName}`,
+      } as const)[language]
+    : "FarmPal";
 
   const styles = StyleSheet.create({
     container: {
@@ -980,7 +987,7 @@ export default function DashboardScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.titleBlock}>
-          <Text style={styles.title}>FarmPal</Text>
+          <Text style={styles.title}>{greetingTitle}</Text>
           <Text style={styles.subtitle}>{locationSummary}</Text>
         </View>
         <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
@@ -1199,17 +1206,11 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
       >
         {plantingAdvisory ? (
-          <>
-            <DecisionAssistantCard
-              advisory={plantingAdvisory}
-              rain={rainData ?? null}
-              lang={language}
-            />
-            <PlantingAdvisoryCard
-              data={plantingAdvisory}
-              lang={language}
-            />
-          </>
+          <DecisionAssistantCard
+            advisory={plantingAdvisory}
+            rain={rainData ?? null}
+            lang={language}
+          />
         ) : null}
 
         <WeatherSnapshotCard

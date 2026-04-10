@@ -38,8 +38,10 @@ export default function RootLayoutShell() {
           field: "Village name",
           placeholder: "Type your village name",
           save: "Save village",
+          saving: "Saving...",
           later: "Maybe later",
           error: "Please enter your village name.",
+          saveError: "We could not save your village right now. Please try again.",
         },
         sw: {
           title: "Ongeza kijiji chako",
@@ -47,8 +49,10 @@ export default function RootLayoutShell() {
           field: "Jina la kijiji",
           placeholder: "Andika jina la kijiji chako",
           save: "Hifadhi kijiji",
+          saving: "Inahifadhi...",
           later: "Baadaye",
           error: "Tafadhali andika jina la kijiji chako.",
+          saveError: "Hatukuweza kuhifadhi kijiji chako sasa. Tafadhali jaribu tena.",
         },
         ki: {
           title: "Add your village",
@@ -56,12 +60,34 @@ export default function RootLayoutShell() {
           field: "Village name",
           placeholder: "Type your village name",
           save: "Save village",
+          saving: "Saving...",
           later: "Maybe later",
           error: "Please enter your village name.",
+          saveError: "We could not save your village right now. Please try again.",
         },
       } as const)[language],
     [language],
   );
+
+  function getFriendlyVillageError(error: unknown): string {
+    if (!(error instanceof Error) || !error.message.trim()) {
+      return copy.saveError;
+    }
+
+    const message = error.message.trim();
+    const lower = message.toLowerCase();
+    if (
+      lower.includes("<html") ||
+      lower.includes("<!doctype") ||
+      lower.includes("unexpected token <") ||
+      lower.includes("failed to parse response") ||
+      lower.startsWith("http ")
+    ) {
+      return copy.saveError;
+    }
+
+    return message;
+  }
   const shouldPromptVillage =
     status === "authenticated" &&
     Boolean(farmer) &&
@@ -162,14 +188,14 @@ export default function RootLayoutShell() {
                     await updateProfile({ villageName: value });
                     setVillageName("");
                   } catch (error) {
-                    setVillageError(error instanceof Error ? error.message : copy.error);
+                    setVillageError(getFriendlyVillageError(error));
                   } finally {
                     setSavingVillage(false);
                   }
                 }}
                 disabled={savingVillage}
               >
-                <Text style={styles.promptPrimaryText}>{savingVillage ? "..." : copy.save}</Text>
+                <Text style={styles.promptPrimaryText}>{savingVillage ? copy.saving : copy.save}</Text>
               </Pressable>
             </View>
           </View>
