@@ -44,14 +44,20 @@ export default function FarmerOtpScreen() {
     en: {
       codeRequired: "Please enter the sent OTP.",
       wrongCode: "Wrong OTP entered.",
+      manualContinue: "I already have the code",
+      manualHint: "If the SMS already arrived, enter the OTP below.",
     },
     sw: {
       codeRequired: "Tafadhali weka OTP uliyotumiwa.",
       wrongCode: "OTP uliyoingiza si sahihi.",
+      manualContinue: "Nina OTP tayari",
+      manualHint: "Kama SMS tayari imefika, weka OTP hapa chini.",
     },
     ki: {
       codeRequired: "Please enter the sent OTP.",
       wrongCode: "Wrong OTP entered.",
+      manualContinue: "I already have the code",
+      manualHint: "If the SMS already arrived, enter the OTP below.",
     },
   } as const;
 
@@ -345,6 +351,17 @@ export default function FarmerOtpScreen() {
                 ) : (
                   <Text style={styles.buttonText}>{t("otpSendButton")}</Text>
                 )}
+              </Pressable>
+
+              <Pressable
+                style={styles.buttonSecondary}
+                onPress={() => {
+                  setError(null);
+                  setInfo(otpCopy[language].manualHint);
+                  setStage("code");
+                }}
+              >
+                <Text style={styles.buttonSecondaryText}>{otpCopy[language].manualContinue}</Text>
               </Pressable>
             </>
           ) : (

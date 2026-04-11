@@ -115,23 +115,27 @@ router.put("/auth/profile", requireFarmerAuth, async (req, res): Promise<void> =
     return;
   }
 
-  const farmer = await updateFarmerSessionProfile(farmerSession.id, {
-    displayName:
-      parsed.data.displayName === undefined ? undefined : parsed.data.displayName.trim() || null,
-    villageName:
-      parsed.data.villageName === undefined ? undefined : parsed.data.villageName.trim() || null,
-  });
+  try {
+    const farmer = await updateFarmerSessionProfile(farmerSession.id, {
+      displayName:
+        parsed.data.displayName === undefined ? undefined : parsed.data.displayName.trim() || null,
+      villageName:
+        parsed.data.villageName === undefined ? undefined : parsed.data.villageName.trim() || null,
+    });
 
-  if (!farmer) {
-    res.status(404).json({ error: "Farmer profile not found." });
-    return;
+    if (!farmer) {
+      res.status(404).json({ error: "Farmer profile not found." });
+      return;
+    }
+
+    res.json({
+      updated: true,
+      farmer,
+      auth: getFarmerAuthStatus(),
+    });
+  } catch (error) {
+    res.status(authErrorStatus(error)).json({ error: authErrorMessage(error) });
   }
-
-  res.json({
-    updated: true,
-    farmer,
-    auth: getFarmerAuthStatus(),
-  });
 });
 
 router.post("/auth/logout", (_req, res) => {
