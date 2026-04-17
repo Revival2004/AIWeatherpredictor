@@ -3,18 +3,19 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
-import { scheduleFeedbackReminder, sendRainAlert } from "@/services/NotificationService";
+import {
+  cancelFeedbackReminder,
+  sendRainAlert,
+} from "@/services/NotificationService";
 import { useBarometer } from "@/hooks/useBarometer";
-import FarmerFeedbackCard, {
-  FEEDBACK_PENDING_KEY,
-  type PendingFeedback,
-} from "@/components/FarmerFeedbackCard";
 import KenyaLocationPicker, { type PickedLocation } from "@/components/KenyaLocationPicker";
 import MapLocationPicker from "@/components/MapLocationPicker";
 import OnboardingModal from "@/components/OnboardingModal";
 import { useFarmerSession } from "@/contexts/FarmerSessionContext";
 import { useLanguage, LANG_LABELS } from "@/contexts/LanguageContext";
 import MLStatusBadge from "@/components/MLStatusBadge";
+import DashboardCropPicker from "@/components/DashboardCropPicker";
+import WorkStageSelector from "@/components/WorkStageSelector";
 import {
   Platform,
   Pressable,
@@ -31,20 +32,24 @@ import {
   useGetWeatherAlerts,
   useGetRainPrediction,
   useGetPlantingAdvisory,
-  useGetLocations,
-  getGetLocationsQueryKey,
   getGetWeatherQueryKey,
   getGetWeatherAlertsQueryKey,
   getGetRainPredictionQueryKey,
   type TrackedLocation,
-  type WeatherPredictionResponse,
   type RainPredictionResponse,
 } from "@/lib/api-client";
-import DecisionAssistantCard from "@/components/DecisionAssistantCard";
+import { customFetch } from "@/lib/api-client/custom-fetch";
+import DecisionAssistantCardAdaptive from "@/components/DecisionAssistantCardAdaptive";
 import AlertsBanner from "@/components/AlertsBannerClean";
 import CommunityInsightCard from "@/components/CommunityInsightCard";
 import TodayTimeline from "@/components/TodayTimeline";
 import WeatherSnapshotCard from "@/components/WeatherSnapshotCardClean";
+import { useTrackedLocationsCache } from "@/hooks/useTrackedLocationsCache";
+import {
+  getCropStageHint,
+  normalizeCropName,
+  type DashboardWorkStage,
+} from "@/lib/farm-context";
 import { useColors } from "@/hooks/useColors";
 
 interface Coords {
@@ -59,32 +64,8 @@ interface StoredLocationState {
   label: string | null;
   userSelected: boolean;
   source: LocationSelectionSource;
+  accuracyMeters?: number | null;
   trackedLocationId?: number | null;
-}
-
-type TipFn = (key: import("@/constants/translationsV2").TranslationKey) => string;
-
-function getFarmingTip(data: WeatherPredictionResponse | undefined, t: TipFn): string | null {
-  if (!data) return null;
-  const { weather, prediction } = data;
-  if (!prediction) return null;
-  const pred = prediction.prediction;
-  if (pred.includes("Rain") || pred.includes("Storm") || pred.includes("Thunder")) {
-    return t("tipIrrigation");
-  }
-  if (pred === "Frost Risk") {
-    return t("tipFrost");
-  }
-  if (weather.humidity < 30) {
-    return t("tipDry");
-  }
-  if (weather.windspeed > 30) {
-    return t("tipWind");
-  }
-  if (weather.temperature > 35) {
-    return t("tipHeat");
-  }
-  return t("tipGood");
 }
 
 function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
@@ -259,17 +240,30 @@ function RainPredictionCard({ data }: { data: RainPredictionResponse }) {
 
 const CACHE_KEY_PREFIX = "weather_cache_v1_";
 const LAST_LOC_KEY = "microclimate_last_location_v1";
+const AUTO_VERIFY_PENDING_KEY = "farmpal_auto_verify_pending_v1";
+const DASHBOARD_CROPS_KEY = "farmpal_dashboard_crops_v1";
+const DASHBOARD_WORK_STAGE_KEY = "farmpal_dashboard_work_stage_v1";
 const LEGACY_DEFAULT_COORDS = { latitude: -0.3031, longitude: 36.08 };
 
-function isPendingFeedbackStale(pending: PendingFeedback, now = Date.now()): boolean {
-  return now - pending.dueAt > 24 * 60 * 60 * 1000;
+interface PendingAutoVerification {
+  lat: number;
+  lon: number;
+  locationName: string;
+  targetTime: string;
+  dueAt: number;
+  predictionValue: "yes" | "no";
+  probability: number;
 }
 
-function getPendingFeedbackKey(pending: Pick<PendingFeedback, "lat" | "lon" | "targetTime">): string {
+function isAutoVerificationStale(pending: PendingAutoVerification, now = Date.now()): boolean {
+  return now - pending.dueAt > 4 * 60 * 60 * 1000;
+}
+
+function getAutoVerificationKey(pending: Pick<PendingAutoVerification, "lat" | "lon" | "targetTime">): string {
   return `${pending.lat.toFixed(4)}:${pending.lon.toFixed(4)}:${pending.targetTime}`;
 }
 
-function formatFeedbackCountdown(dueAt: number, now: number): string {
+function formatCountdown(dueAt: number, now: number): string {
   const minutes = Math.max(0, Math.round((dueAt - now) / 60000));
   if (minutes < 60) {
     return `${minutes} min`;
@@ -369,19 +363,27 @@ export default function DashboardScreen() {
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
   const [locationSource, setLocationSource] = useState<LocationSelectionSource>("device");
+  const [locationAccuracyMeters, setLocationAccuracyMeters] = useState<number | null>(null);
   const [selectedTrackedLocationId, setSelectedTrackedLocationId] = useState<number | null>(null);
   const [cachedData, setCachedData] = useState<{ weather: unknown; rain: unknown; ts: number } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [locationUpdated, setLocationUpdated] = useState(false);
-  const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
-  const [feedbackDismissed, setFeedbackDismissed] = useState(false);
-  const [feedbackNow, setFeedbackNow] = useState(Date.now());
-  const lastFeedbackKeyRef = useRef<string | null>(null);
-  const { data: locationsData } = useGetLocations({
-    query: {
-      queryKey: getGetLocationsQueryKey(),
-      staleTime: 30 * 1000,
-    },
+  const [selectedCrops, setSelectedCrops] = useState<string[]>([]);
+  const [selectedWorkStage, setSelectedWorkStage] = useState<DashboardWorkStage>("planting");
+  const [pendingAutoVerification, setPendingAutoVerification] = useState<PendingAutoVerification | null>(null);
+  const [autoVerificationNow, setAutoVerificationNow] = useState(Date.now());
+  const [autoResolving, setAutoResolving] = useState(false);
+  const [autoVerificationMessage, setAutoVerificationMessage] = useState<string | null>(null);
+  const lastAutoVerificationKeyRef = useRef<string | null>(null);
+  const autoVerificationRetryAtRef = useRef<number>(0);
+  const {
+    locations,
+    error: locationsError,
+    hasFallbackLocations,
+    refetch: refetchLocations,
+  } = useTrackedLocationsCache({
+    enabled: Boolean(farmer?.id),
+    farmerId: farmer?.id,
   });
   const currentVillageName = farmer?.villageName?.trim() || null;
   const farmerFirstName = farmer?.displayName?.trim()?.split(/\s+/)[0] || null;
@@ -424,6 +426,7 @@ export default function DashboardScreen() {
     setLocError(null);
     setLocationLabel(next.label);
     setLocationSource(next.source);
+    setLocationAccuracyMeters(next.accuracyMeters ?? null);
     setSelectedTrackedLocationId(next.trackedLocationId ?? null);
     AsyncStorage.setItem(LAST_LOC_KEY, JSON.stringify(next)).catch(() => {});
   };
@@ -436,6 +439,54 @@ export default function DashboardScreen() {
       source: "tracked",
       trackedLocationId: loc.id,
     });
+
+    const preferredCrop = normalizeCropName(loc.cropType);
+    if (preferredCrop && selectedCrops.length === 0) {
+      setSelectedCrops([preferredCrop]);
+    }
+  };
+
+  const getDevicePosition = async (): Promise<{ coords: Coords; accuracyMeters: number | null }> => {
+    if (Platform.OS === "web") {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        throw new Error(t("locationBrowserPick"));
+      }
+
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) =>
+            resolve({
+              coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+              accuracyMeters: typeof pos.coords.accuracy === "number" ? pos.coords.accuracy : null,
+            }),
+          () => reject(new Error(t("locationEnableOrPick"))),
+          { enableHighAccuracy: true, timeout: 12_000, maximumAge: 15_000 },
+        );
+      });
+    }
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      throw new Error(t("locationPermissionOrPick"));
+    }
+
+    const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
+    const precisePosition = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest }),
+      new Promise<Location.LocationObject | null>((resolve) => {
+        setTimeout(() => resolve(null), 12_000);
+      }),
+    ]).catch(() => null);
+
+    const chosen = precisePosition ?? lastKnown;
+    if (!chosen) {
+      throw new Error(t("locationCurrentOrPick"));
+    }
+
+    return {
+      coords: { latitude: chosen.coords.latitude, longitude: chosen.coords.longitude },
+      accuracyMeters: typeof chosen.coords.accuracy === "number" ? chosen.coords.accuracy : null,
+    };
   };
 
   // On mount: restore last saved location immediately, then silently re-check GPS.
@@ -450,52 +501,36 @@ export default function DashboardScreen() {
       setLocError(message);
     };
 
-    const applyGps = (c: Coords, silent = false) => {
+    const applyGps = (
+      position: { coords: Coords; accuracyMeters: number | null },
+      silent = false,
+    ) => {
+      const movedDistance = silent && savedCoords ? distanceKm(savedCoords, position.coords) : 0;
       if (silent && savedCoords) {
-        const moved = distanceKm(savedCoords, c);
-        if (moved < 5) return; // hasn't moved significantly - keep saved location
+        savedCoords = position.coords;
       }
       applyLocationSelection(
-        { coords: c, label: null, userSelected: false, source: "device" },
-        { showUpdatedBanner: silent && Boolean(savedCoords) },
+        {
+          coords: position.coords,
+          label: null,
+          userSelected: false,
+          source: "device",
+          accuracyMeters: position.accuracyMeters,
+        },
+        { showUpdatedBanner: silent && Boolean(savedCoords) && movedDistance >= 0.5 },
       );
     };
 
     const tryGps = (silent: boolean) => {
-      if (Platform.OS === "web") {
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, silent),
-            () => {
-              if (!silent) {
-                showLocationRequired(t("locationEnableOrPick"));
-              }
-            },
-            { timeout: 8000 }
-          );
-        } else {
+      getDevicePosition()
+        .then((position) => applyGps(position, silent))
+        .catch(() => {
           if (!silent) {
-            showLocationRequired(t("locationBrowserPick"));
-          }
-        }
-      } else {
-        Location.requestForegroundPermissionsAsync().then(({ status }) => {
-          if (status !== "granted") {
-            if (!silent) {
-              showLocationRequired(t("locationPermissionOrPick"));
-            }
-            return null;
-          }
-          return Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        }).then((pos) => {
-          if (!pos) return;
-          applyGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }, silent);
-        }).catch(() => {
-          if (!silent) {
-            showLocationRequired(t("locationCurrentOrPick"));
+            showLocationRequired(
+              Platform.OS === "web" ? t("locationEnableOrPick") : t("locationCurrentOrPick"),
+            );
           }
         });
-      }
     };
 
     AsyncStorage.getItem(LAST_LOC_KEY).then((raw) => {
@@ -510,6 +545,8 @@ export default function DashboardScreen() {
               label: saved.label ?? null,
               userSelected: Boolean(saved.userSelected),
               source: saved.source ?? (saved.userSelected ? "picker" : "device"),
+              accuracyMeters:
+                typeof saved.accuracyMeters === "number" ? saved.accuracyMeters : null,
               trackedLocationId:
                 typeof saved.trackedLocationId === "number" ? saved.trackedLocationId : null,
             });
@@ -529,50 +566,81 @@ export default function DashboardScreen() {
       setGeoLoading(true);
       tryGps(false);
     });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
-    AsyncStorage.getItem(FEEDBACK_PENDING_KEY)
-      .then((raw) => {
-        if (!raw) {
-          return;
+    AsyncStorage.multiGet([DASHBOARD_CROPS_KEY, DASHBOARD_WORK_STAGE_KEY, AUTO_VERIFY_PENDING_KEY])
+      .then((entries) => {
+        const cropsRaw = entries[0]?.[1];
+        const stageRaw = entries[1]?.[1];
+        const autoRaw = entries[2]?.[1];
+
+        if (cropsRaw) {
+          try {
+            const parsed = JSON.parse(cropsRaw) as string[];
+            if (Array.isArray(parsed)) {
+              setSelectedCrops(parsed);
+            }
+          } catch {}
         }
 
-        const parsed = JSON.parse(raw) as PendingFeedback;
-        if (!parsed || typeof parsed !== "object" || isPendingFeedbackStale(parsed)) {
-          AsyncStorage.removeItem(FEEDBACK_PENDING_KEY).catch(() => {});
-          return;
+        if (
+          stageRaw === "planting" ||
+          stageRaw === "harvesting" ||
+          stageRaw === "weeding" ||
+          stageRaw === "spraying"
+        ) {
+          setSelectedWorkStage(stageRaw);
         }
 
-        lastFeedbackKeyRef.current = getPendingFeedbackKey(parsed);
-        setPendingFeedback(parsed);
+        if (autoRaw) {
+          try {
+            const parsed = JSON.parse(autoRaw) as PendingAutoVerification;
+            if (parsed && typeof parsed === "object" && !isAutoVerificationStale(parsed)) {
+              lastAutoVerificationKeyRef.current = getAutoVerificationKey(parsed);
+              setPendingAutoVerification(parsed);
+            } else {
+              AsyncStorage.removeItem(AUTO_VERIFY_PENDING_KEY).catch(() => {});
+            }
+          } catch {
+            AsyncStorage.removeItem(AUTO_VERIFY_PENDING_KEY).catch(() => {});
+          }
+        }
       })
       .catch(() => {});
+
+    cancelFeedbackReminder().catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (!pendingFeedback) {
-      setFeedbackDismissed(false);
+    AsyncStorage.setItem(DASHBOARD_CROPS_KEY, JSON.stringify(selectedCrops)).catch(() => {});
+  }, [selectedCrops]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(DASHBOARD_WORK_STAGE_KEY, selectedWorkStage).catch(() => {});
+  }, [selectedWorkStage]);
+
+  useEffect(() => {
+    if (!pendingAutoVerification) {
       return;
     }
 
-    setFeedbackNow(Date.now());
+    setAutoVerificationNow(Date.now());
     const interval = setInterval(() => {
-      setFeedbackNow(Date.now());
+      setAutoVerificationNow(Date.now());
     }, 30_000);
 
     return () => clearInterval(interval);
-  }, [pendingFeedback]);
+  }, [pendingAutoVerification]);
 
   useEffect(() => {
-    if (!pendingFeedback || !isPendingFeedbackStale(pendingFeedback)) {
+    if (!pendingAutoVerification || !isAutoVerificationStale(pendingAutoVerification)) {
       return;
     }
 
-    AsyncStorage.removeItem(FEEDBACK_PENDING_KEY).catch(() => {});
-    setPendingFeedback(null);
-    setFeedbackDismissed(false);
-  }, [pendingFeedback, feedbackNow]);
+    AsyncStorage.removeItem(AUTO_VERIFY_PENDING_KEY).catch(() => {});
+    setPendingAutoVerification(null);
+  }, [autoVerificationNow, pendingAutoVerification]);
 
   const baro = useBarometer();
 
@@ -620,7 +688,7 @@ export default function DashboardScreen() {
     }
   );
 
-  const { data: plantingAdvisory } = useGetPlantingAdvisory(
+  const { data: plantingAdvisory, refetch: refetchAdvisory } = useGetPlantingAdvisory(
     { lat: coords?.latitude ?? 0, lon: coords?.longitude ?? 0 },
     {
       query: {
@@ -636,44 +704,23 @@ export default function DashboardScreen() {
     setLocError(null);
 
     try {
-      if (Platform.OS === "web") {
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              applyLocationSelection({
-                coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
-                label: null,
-                userSelected: false,
-                source: "device",
-              });
-            },
-            () => {
-              setLocError(t("locationUnavailableShort"));
-              setGeoLoading(false);
-            },
-            { timeout: 10000 }
-          );
-        } else {
-          setLocError(t("locationUnsupportedShort"));
-          setGeoLoading(false);
-        }
+      const position = await getDevicePosition();
+      applyLocationSelection({
+        coords: position.coords,
+        label: null,
+        userSelected: false,
+        source: "device",
+        accuracyMeters: position.accuracyMeters,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message === t("locationBrowserPick")) {
+        setLocError(t("locationUnsupportedShort"));
+      } else if (message === t("locationPermissionOrPick")) {
+        setLocError(t("locationPermissionDeniedShort"));
       } else {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          setLocError(t("locationPermissionDeniedShort"));
-          setGeoLoading(false);
-          return;
-        }
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        applyLocationSelection({
-          coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
-          label: null,
-          userSelected: false,
-          source: "device",
-        });
+        setLocError(t("locationCouldNotGetShort"));
       }
-    } catch {
-      setLocError(t("locationCouldNotGetShort"));
       setGeoLoading(false);
     }
   };
@@ -721,49 +768,154 @@ export default function DashboardScreen() {
       return;
     }
 
-    if (pendingFeedback && !isPendingFeedbackStale(pendingFeedback)) {
-      return;
-    }
-
     const dueAt = new Date(rainData.targetTime).getTime();
     if (!Number.isFinite(dueAt)) {
       return;
     }
 
-    const nextPending: PendingFeedback = {
+    const nextPending: PendingAutoVerification = {
       lat: coords.latitude,
       lon: coords.longitude,
       locationName:
         locationSource === "device"
           ? currentVillageName || t("yourFarmFallback")
           : locationLabel ?? t("yourFarmFallback"),
-      predictedAt: Date.now(),
       targetTime: rainData.targetTime,
       dueAt,
       predictionValue: rainData.predictionValue,
       probability: rainData.probability,
     };
-    const feedbackKey = getPendingFeedbackKey(nextPending);
+    const autoVerificationKey = getAutoVerificationKey(nextPending);
+    const currentKey = pendingAutoVerification
+      ? getAutoVerificationKey(pendingAutoVerification)
+      : null;
 
-    if (lastFeedbackKeyRef.current === feedbackKey) {
+    if (
+      currentKey === autoVerificationKey &&
+      pendingAutoVerification &&
+      !isAutoVerificationStale(pendingAutoVerification)
+    ) {
       return;
     }
 
-    lastFeedbackKeyRef.current = feedbackKey;
-    setPendingFeedback(nextPending);
-    setFeedbackDismissed(false);
-    AsyncStorage.setItem(FEEDBACK_PENDING_KEY, JSON.stringify(nextPending)).catch(() => {});
-
-    if (dueAt > Date.now()) {
-      scheduleFeedbackReminder(
-        nextPending.locationName,
-        Math.round((dueAt - Date.now()) / 1000),
-      ).catch(() => {});
+    if (lastAutoVerificationKeyRef.current === autoVerificationKey) {
+      return;
     }
-  }, [coords, currentVillageName, locationLabel, locationSource, pendingFeedback, rainData, t]);
+
+    lastAutoVerificationKeyRef.current = autoVerificationKey;
+    autoVerificationRetryAtRef.current = 0;
+    setAutoVerificationMessage(null);
+    setPendingAutoVerification(nextPending);
+    AsyncStorage.setItem(AUTO_VERIFY_PENDING_KEY, JSON.stringify(nextPending)).catch(() => {});
+  }, [coords, currentVillageName, locationLabel, locationSource, pendingAutoVerification, rainData, t]);
+
+  useEffect(() => {
+    if (!pendingAutoVerification || autoResolving) {
+      return;
+    }
+
+    if (autoVerificationNow < pendingAutoVerification.dueAt) {
+      return;
+    }
+
+    if (autoVerificationNow < autoVerificationRetryAtRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const runAutoVerification = async () => {
+      setAutoResolving(true);
+
+      try {
+        const result = await customFetch<{
+          matchedPrediction?: boolean;
+          observedAnswer?: "yes" | "no" | "almost";
+          resolved?: boolean;
+        }>("/api/feedback/auto-resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lat: pendingAutoVerification.lat,
+            lon: pendingAutoVerification.lon,
+            locationName: pendingAutoVerification.locationName,
+            targetTime: pendingAutoVerification.targetTime,
+          }),
+          responseType: "json",
+          timeoutMs: 15_000,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        AsyncStorage.removeItem(AUTO_VERIFY_PENDING_KEY).catch(() => {});
+        setPendingAutoVerification(null);
+        autoVerificationRetryAtRef.current = 0;
+
+        const observedAnswer = result.observedAnswer;
+        const verificationCopy = {
+          en:
+            observedAnswer === "yes"
+              ? "FarmPal checked real weather and confirmed wet conditions for this call."
+              : observedAnswer === "almost"
+              ? "FarmPal checked real weather and saw mixed rain conditions for this call."
+              : "FarmPal checked real weather and confirmed dry conditions for this call.",
+          sw:
+            observedAnswer === "yes"
+              ? "FarmPal imekagua hali halisi ya hewa na kuthibitisha kuwa kulikuwa na unyevu au mvua."
+              : observedAnswer === "almost"
+              ? "FarmPal imekagua hali halisi ya hewa na kuona ishara za mvua zilizochanganyika."
+              : "FarmPal imekagua hali halisi ya hewa na kuthibitisha dirisha la ukavu.",
+          ki:
+            observedAnswer === "yes"
+              ? "FarmPal imekagua hali halisi ya hewa na kuthibitisha kuwa kulikuwa na unyevu au mvua."
+              : observedAnswer === "almost"
+              ? "FarmPal imekagua hali halisi ya hewa na kuona ishara za mvua zilizochanganyika."
+              : "FarmPal imekagua hali halisi ya hewa na kuthibitisha dirisha la ukavu.",
+        } as const;
+
+        setAutoVerificationMessage(verificationCopy[language]);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        autoVerificationRetryAtRef.current = Date.now() + 5 * 60 * 1000;
+        setAutoVerificationMessage(
+          ({
+            en: "FarmPal could not confirm the outcome right now. It will retry shortly.",
+            sw: "FarmPal haikuweza kuthibitisha matokeo sasa. Itajaribu tena baada ya muda mfupi.",
+            ki: "FarmPal haikuweza kuthibitisha matokeo sasa. Itajaribu tena baada ya muda mfupi.",
+          } as const)[language],
+        );
+      } finally {
+        if (!cancelled) {
+          setAutoResolving(false);
+        }
+      }
+    };
+
+    runAutoVerification().catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [autoResolving, autoVerificationNow, language, pendingAutoVerification]);
+
+  useEffect(() => {
+    if (!autoVerificationMessage) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setAutoVerificationMessage(null);
+    }, 9000);
+
+    return () => clearTimeout(timeout);
+  }, [autoVerificationMessage]);
 
   const isLoading = geoLoading || weatherLoading;
-  const activeLocations = (locationsData?.locations ?? []).filter((loc) => loc.active);
   const isCurrentLocationView = locationSource === "device";
   const heroLocationName = isCurrentLocationView
     ? currentVillageName || t("currentLocationLabel")
@@ -780,6 +932,29 @@ export default function DashboardScreen() {
         ki: `Karibu ${farmerFirstName}`,
       } as const)[language]
     : "FarmPal";
+  const dashboardCopy = {
+    en: {
+      cachedLocations: "Saved farms are showing from local cache while FarmPal reconnects.",
+      refreshLocations: "Saved farms could not refresh yet. Pull down to try again.",
+      autoCheckTitle: "Automatic forecast check",
+      autoCheckWaiting: "FarmPal will compare the real weather around",
+      autoCheckWorking: "FarmPal is checking the real weather now.",
+    },
+    sw: {
+      cachedLocations: "Mashamba yaliyohifadhiwa yanaonyeshwa kutoka kumbukumbu ya simu wakati FarmPal inaunganisha tena.",
+      refreshLocations: "Mashamba yaliyohifadhiwa hayakuweza kusasishwa sasa. Vuta chini kujaribu tena.",
+      autoCheckTitle: "Ukaguzi wa moja kwa moja",
+      autoCheckWaiting: "FarmPal italinganisha hali halisi ya hewa karibu saa",
+      autoCheckWorking: "FarmPal inakagua hali halisi ya hewa sasa.",
+    },
+    ki: {
+      cachedLocations: "Mashamba yaliyohifadhiwa yanaonyeshwa kutoka kumbukumbu ya simu wakati FarmPal inaunganisha tena.",
+      refreshLocations: "Mashamba yaliyohifadhiwa hayakuweza kusasishwa sasa. Vuta chini kujaribu tena.",
+      autoCheckTitle: "Ukaguzi wa moja kwa moja",
+      autoCheckWaiting: "FarmPal italinganisha hali halisi ya hewa karibu saa",
+      autoCheckWorking: "FarmPal inakagua hali halisi ya hewa sasa.",
+    },
+  } as const;
 
   const styles = StyleSheet.create({
     container: {
@@ -973,11 +1148,16 @@ export default function DashboardScreen() {
     },
   });
 
-  const farmingTip = getFarmingTip(weatherData, t);
-  const feedbackDue = pendingFeedback ? feedbackNow >= pendingFeedback.dueAt : false;
-  const feedbackCountdown = pendingFeedback ? formatFeedbackCountdown(pendingFeedback.dueAt, feedbackNow) : null;
-  const feedbackTimeLabel = pendingFeedback
-    ? new Date(pendingFeedback.dueAt).toLocaleTimeString("en-KE", {
+  const farmingTip = getCropStageHint(selectedCrops, selectedWorkStage, language);
+  const activeLocations = locations.filter((loc) => loc.active);
+  const autoVerificationDue = pendingAutoVerification
+    ? autoVerificationNow >= pendingAutoVerification.dueAt
+    : false;
+  const autoVerificationCountdown = pendingAutoVerification
+    ? formatCountdown(pendingAutoVerification.dueAt, autoVerificationNow)
+    : null;
+  const autoVerificationTimeLabel = pendingAutoVerification
+    ? new Date(pendingAutoVerification.dueAt).toLocaleTimeString("en-KE", {
         hour: "numeric",
         minute: "2-digit",
       })
@@ -1091,6 +1271,13 @@ export default function DashboardScreen() {
             );
           })}
         </ScrollView>
+        {locationsError ? (
+          <Text style={styles.switcherSubtitle}>
+            {hasFallbackLocations
+              ? dashboardCopy[language].cachedLocations
+              : dashboardCopy[language].refreshLocations}
+          </Text>
+        ) : null}
       </View>
 
       {/* Location auto-updated banner */}
@@ -1198,18 +1385,33 @@ export default function DashboardScreen() {
         refreshControl={
           <RefreshControl
             refreshing={!!weatherLoading && fetchEnabled}
-            onRefresh={() => { refetch(); refetchAlerts(); refetchRain(); }}
+            onRefresh={() => {
+              refetch();
+              refetchAlerts();
+              refetchRain();
+              refetchAdvisory();
+              refetchLocations();
+            }}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
         }
         showsVerticalScrollIndicator={false}
       >
+        <DashboardCropPicker
+          language={language}
+          selectedCrops={selectedCrops}
+          onChange={setSelectedCrops}
+        />
+
         {plantingAdvisory ? (
-          <DecisionAssistantCard
+          <DecisionAssistantCardAdaptive
             advisory={plantingAdvisory}
             rain={rainData ?? null}
+            weather={weatherData ?? null}
             lang={language}
+            selectedCrops={selectedCrops}
+            workStage={selectedWorkStage}
           />
         ) : null}
 
@@ -1217,8 +1419,13 @@ export default function DashboardScreen() {
           data={weatherData}
           isLoading={isLoading}
           error={weatherError as Error | null}
-          onRefresh={() => refetch()}
+          onRefresh={() => {
+            refetch();
+            refetchRain();
+            refetchAdvisory();
+          }}
           locationName={heroLocationName}
+          locationAccuracyMeters={isCurrentLocationView ? locationAccuracyMeters : null}
         />
 
         {__DEV__ && weatherError && (
@@ -1299,44 +1506,54 @@ export default function DashboardScreen() {
                   }
                 />
                 <RainPredictionCard data={rainData} />
-                {pendingFeedback && !feedbackDue ? (
+                {pendingAutoVerification ? (
                   <View style={styles.followUpCard}>
                     <View style={styles.followUpRow}>
                       <View style={styles.followUpIcon}>
-                        <Feather name="message-circle" size={18} color="#3B82F6" />
+                        <Feather
+                          name={autoResolving ? "refresh-cw" : "cloud-rain"}
+                          size={18}
+                          color="#3B82F6"
+                        />
                       </View>
                       <View style={styles.followUpMeta}>
-                        <Text style={styles.followUpTitle}>{t("predictionFollowUpTitle")}</Text>
+                        <Text style={styles.followUpTitle}>{dashboardCopy[language].autoCheckTitle}</Text>
                         <Text style={styles.followUpText}>
-                          {tf("predictionFollowUpText", {
-                            time: feedbackTimeLabel ?? "--:--",
-                            name: pendingFeedback.locationName,
-                          })}
+                          {autoResolving
+                            ? dashboardCopy[language].autoCheckWorking
+                            : `${dashboardCopy[language].autoCheckWaiting} ${autoVerificationTimeLabel ?? "--:--"} (${pendingAutoVerification.locationName}).`}
                         </Text>
                       </View>
                     </View>
                     <View style={styles.followUpPill}>
                       <Text style={styles.followUpPillText}>
-                        {tf("feedbackOpensIn", { time: feedbackCountdown ?? "0 min" })}
+                        {autoVerificationDue
+                          ? dashboardCopy[language].autoCheckWorking
+                          : autoVerificationCountdown ?? "0 min"}
                       </Text>
                     </View>
                   </View>
                 ) : null}
-                {pendingFeedback && feedbackDue && !feedbackDismissed ? (
-                  <>
-                    <SectionHeader
-                      title={t("feedbackSectionTitle")}
-                      subtitle={t("feedbackSectionSubtitle")}
-                    />
-                    <FarmerFeedbackCard
-                      pending={pendingFeedback}
-                      onClose={() => setFeedbackDismissed(true)}
-                      onComplete={() => {
-                        setPendingFeedback(null);
-                        setFeedbackDismissed(false);
-                      }}
-                    />
-                  </>
+                {autoVerificationMessage ? (
+                  <View
+                    style={[
+                      styles.followUpCard,
+                      {
+                        backgroundColor: `${colors.primary}10`,
+                        borderColor: `${colors.primary}35`,
+                      },
+                    ]}
+                  >
+                    <View style={styles.followUpRow}>
+                      <View style={[styles.followUpIcon, { backgroundColor: `${colors.primary}16` }]}>
+                        <Feather name="check-circle" size={18} color={colors.primary} />
+                      </View>
+                      <View style={styles.followUpMeta}>
+                        <Text style={styles.followUpTitle}>{dashboardCopy[language].autoCheckTitle}</Text>
+                        <Text style={styles.followUpText}>{autoVerificationMessage}</Text>
+                      </View>
+                    </View>
+                  </View>
                 ) : null}
               </>
             )}
@@ -1348,6 +1565,12 @@ export default function DashboardScreen() {
                 lon={coords.longitude}
               />
             )}
+
+            <WorkStageSelector
+              language={language}
+              selectedStage={selectedWorkStage}
+              onSelect={setSelectedWorkStage}
+            />
 
             <Text style={styles.sectionLabel}>{t("actionNowTitle").toUpperCase()}</Text>
             {farmingTip && (

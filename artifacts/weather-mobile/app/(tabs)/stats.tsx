@@ -22,6 +22,7 @@ import { StatsPanel } from "@/components/StatsPanel";
 import { useFarmerSession } from "@/contexts/FarmerSessionContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useColors } from "@/hooks/useColors";
+import { useTrackedLocationsCache } from "@/hooks/useTrackedLocationsCache";
 import {
   getGetLocationsQueryKey,
   getGetWeatherStatsQueryKey,
@@ -30,7 +31,6 @@ import {
   useAddLocation,
   useDeactivateLocation,
   useDeleteLocation,
-  useGetLocations,
   useGetWeatherStats,
 } from "@/lib/api-client";
 import { customFetch } from "@/lib/api-client/custom-fetch";
@@ -69,6 +69,20 @@ export default function StatsScreen() {
       villageMissing: "Village name not set",
     },
   } as const;
+  const trackedFarmStatusCopy = {
+    en: {
+      cached: "Saved farms are showing from local cache while FarmPal reconnects.",
+      refreshError: "Saved farms could not refresh right now. Pull down to try again.",
+    },
+    sw: {
+      cached: "Mashamba yaliyohifadhiwa yanaonyeshwa kutoka kumbukumbu ya simu wakati FarmPal inaunganisha tena.",
+      refreshError: "Mashamba yaliyohifadhiwa hayakuweza kusasishwa sasa. Vuta chini kujaribu tena.",
+    },
+    ki: {
+      cached: "Mashamba yaliyohifadhiwa yanaonyeshwa kutoka kumbukumbu ya simu wakati FarmPal inaunganisha tena.",
+      refreshError: "Mashamba yaliyohifadhiwa hayakuweza kusasishwa sasa. Vuta chini kujaribu tena.",
+    },
+  } as const;
   const cropChipCopy = {
     Maize: { en: "Maize", sw: "Mahindi", ki: "Mahindi" },
     Tea: { en: "Tea", sw: "Chai", ki: "Chai" },
@@ -93,20 +107,47 @@ export default function StatsScreen() {
   });
 
   const {
-    data: locationsData,
+    locations,
     isLoading: locationsLoading,
+    isFetching: locationsFetching,
+    error: locationsError,
+    hasFallbackLocations,
     refetch: refetchLocations,
-  } = useGetLocations({
-    query: {
-      queryKey: getGetLocationsQueryKey(),
-      staleTime: 30 * 1000,
-    },
+    replaceLocations,
+  } = useTrackedLocationsCache({
+    enabled: Boolean(farmer?.id),
+    farmerId: farmer?.id,
   });
+
+  function sortLocationsForUi(nextLocations: TrackedLocation[]): TrackedLocation[] {
+    return [...nextLocations].sort((a, b) => {
+      const activeDelta = Number(b.active) - Number(a.active);
+      if (activeDelta !== 0) {
+        return activeDelta;
+      }
+
+      return new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime();
+    });
+  }
+
+  function syncLocations(nextLocations: TrackedLocation[]) {
+    const normalized = sortLocationsForUi(nextLocations);
+    replaceLocations(normalized);
+    queryClient.setQueryData(getGetLocationsQueryKey(), { locations: normalized });
+  }
+
+  function upsertLocationEverywhere(location: TrackedLocation) {
+    syncLocations([location, ...locations.filter((entry) => entry.id !== location.id)]);
+  }
+
+  function removeLocationEverywhere(locationId: number) {
+    syncLocations(locations.filter((entry) => entry.id !== locationId));
+  }
 
   const addLocationMutation = useAddLocation({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+      onSuccess: ({ location }) => {
+        upsertLocationEverywhere(location);
         setShowAddLocation(false);
         setNewName("");
         setNewVillageName("");
@@ -117,24 +158,24 @@ export default function StatsScreen() {
 
   const deleteLocationMutation = useDeleteLocation({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+      onSuccess: ({ location }) => {
+        removeLocationEverywhere(location.id);
       },
     },
   });
 
   const activateMutation = useActivateLocation({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+      onSuccess: ({ location }) => {
+        upsertLocationEverywhere(location);
       },
     },
   });
 
   const deactivateMutation = useDeactivateLocation({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+      onSuccess: ({ location }) => {
+        upsertLocationEverywhere(location);
       },
     },
   });
@@ -176,7 +217,7 @@ export default function StatsScreen() {
     setSavingCrop(true);
 
     try {
-      await customFetch(`/api/locations/${id}/crop`, {
+      const response = await customFetch<{ location: TrackedLocation }>(`/api/locations/${id}/crop`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -186,7 +227,7 @@ export default function StatsScreen() {
         }),
         responseType: "json",
       });
-      queryClient.invalidateQueries({ queryKey: getGetLocationsQueryKey() });
+      upsertLocationEverywhere(response.location);
       setEditingCropId(null);
     } catch {
       Alert.alert(t("statsCropSaveErrorTitle"), t("statsCropSaveErrorBody"));
@@ -235,9 +276,8 @@ export default function StatsScreen() {
     ]);
   }
 
-  const isRefetching = statsRefetching || locationsLoading;
+  const isRefetching = statsRefetching || locationsFetching;
   const predEntries = Object.entries(statsData?.predictionBreakdown ?? {}).sort((a, b) => b[1] - a[1]);
-  const locations: TrackedLocation[] = locationsData?.locations ?? [];
   const readingCount = statsData?.totalReadings ?? 0;
   const learningColor =
     readingCount >= 120 ? "#3D8B37"
@@ -690,7 +730,14 @@ export default function StatsScreen() {
         />
 
         <View style={styles.card}>
-          {locationsLoading ? (
+          {locationsError ? (
+            <Text style={[styles.emptyText, { paddingTop: 0, paddingBottom: 8 }]}>
+              {hasFallbackLocations
+                ? trackedFarmStatusCopy[language].cached
+                : trackedFarmStatusCopy[language].refreshError}
+            </Text>
+          ) : null}
+          {locationsLoading && locations.length === 0 ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
           ) : locations.length === 0 ? (
             <Text style={styles.emptyText}>

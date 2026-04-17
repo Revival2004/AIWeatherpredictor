@@ -13,6 +13,7 @@ interface WeatherSnapshotCardCleanProps {
   error: Error | null;
   onRefresh: () => void;
   locationName?: string | null;
+  locationAccuracyMeters?: number | null;
 }
 
 const DEGREE = "\u00B0";
@@ -70,13 +71,26 @@ export default function WeatherSnapshotCardClean({
   error,
   onRefresh,
   locationName,
+  locationAccuracyMeters,
 }: WeatherSnapshotCardCleanProps) {
   const colors = useColors();
   const { language, t } = useLanguage();
   const copy = {
-    en: { eyebrow: "WEATHER NOW" },
-    sw: { eyebrow: "HALI YA HEWA SASA" },
-    ki: { eyebrow: "HALI YA HEWA SASA" },
+    en: {
+      eyebrow: "WEATHER NOW",
+      accuracyLabel: "Accuracy",
+      accuracyPending: "Improving live fix",
+    },
+    sw: {
+      eyebrow: "HALI YA HEWA SASA",
+      accuracyLabel: "Usahihi",
+      accuracyPending: "Usahihi wa eneo unaimarishwa",
+    },
+    ki: {
+      eyebrow: "HALI YA HEWA SASA",
+      accuracyLabel: "Usahihi",
+      accuracyPending: "Usahihi wa eneo unaimarishwa",
+    },
   } as const;
 
   const handleRefresh = () => {
@@ -123,6 +137,10 @@ export default function WeatherSnapshotCardClean({
   const { weather, location } = data;
   const primaryLocation = locationName || t("currentLocationLabel");
   const condition = wmoCondition(weather.weathercode, t);
+  const accuracyLabel =
+    typeof locationAccuracyMeters === "number" && Number.isFinite(locationAccuracyMeters)
+      ? `${copy[language].accuracyLabel}: ~${Math.max(1, Math.round(locationAccuracyMeters))} m`
+      : copy[language].accuracyPending;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -133,9 +151,12 @@ export default function WeatherSnapshotCardClean({
             {primaryLocation}
           </Text>
           <Text style={[styles.locationSub, { color: colors.mutedForeground }]} numberOfLines={1}>
-            {Math.abs(location.lat).toFixed(3)}
-            {DEGREE} {location.lat >= 0 ? "N" : "S"} {" \u2022 "} {Math.abs(location.lon).toFixed(3)}
+            {Math.abs(location.lat).toFixed(5)}
+            {DEGREE} {location.lat >= 0 ? "N" : "S"} {" \u2022 "} {Math.abs(location.lon).toFixed(5)}
             {DEGREE} {location.lon >= 0 ? "E" : "W"}
+          </Text>
+          <Text style={[styles.locationSub, { color: colors.mutedForeground }]} numberOfLines={1}>
+            {accuracyLabel}
           </Text>
         </View>
         <Pressable

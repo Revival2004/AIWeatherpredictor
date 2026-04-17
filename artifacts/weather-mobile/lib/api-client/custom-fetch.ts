@@ -1,5 +1,6 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  timeoutMs?: number;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -10,6 +11,7 @@ export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 // ---------------------------------------------------------------------------
 // Module-level configuration
@@ -150,6 +152,49 @@ function getStringField(value: unknown, key: string): string | undefined {
 
 function truncate(text: string, maxLength = 300): string {
   return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 3))}...` : text;
+}
+
+function createTimeoutSignal(
+  sourceSignal: AbortSignal | null | undefined,
+  timeoutMs: number,
+): {
+  signal: AbortSignal | null;
+  cleanup: () => void;
+  didTimeOut: () => boolean;
+} {
+  if (typeof AbortController === "undefined") {
+    return {
+      signal: sourceSignal ?? null,
+      cleanup: () => {},
+      didTimeOut: () => false,
+    };
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const abortFromSource = () => controller.abort();
+  if (sourceSignal) {
+    if (sourceSignal.aborted) {
+      controller.abort();
+    } else {
+      sourceSignal.addEventListener("abort", abortFromSource, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      sourceSignal?.removeEventListener("abort", abortFromSource);
+    },
+    didTimeOut: () => timedOut,
+  };
 }
 
 function buildErrorMessage(response: Response, data: unknown): string {
@@ -331,7 +376,12 @@ export async function customFetch<T = unknown>(
   options: CustomFetchOptions = {},
 ): Promise<T> {
   input = applyBaseUrl(input);
-  const { responseType = "auto", headers: headersInit, ...init } = options;
+  const {
+    responseType = "auto",
+    headers: headersInit,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    ...init
+  } = options;
 
   const method = resolveMethod(input, init.method);
 
@@ -363,8 +413,25 @@ export async function customFetch<T = unknown>(
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
+  const timeoutSignal = createTimeoutSignal(init.signal, timeoutMs);
+  let response: Response;
 
-  const response = await fetch(input, { ...init, method, headers });
+  try {
+    response = await fetch(input, {
+      ...init,
+      method,
+      headers,
+      signal: timeoutSignal.signal ?? init.signal,
+    });
+  } catch (error) {
+    if (timeoutSignal.didTimeOut()) {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    }
+
+    throw error;
+  } finally {
+    timeoutSignal.cleanup();
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

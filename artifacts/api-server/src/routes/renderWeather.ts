@@ -19,6 +19,7 @@ import {
   listActiveLocations,
   listFeedbackRecords,
   listPredictionRecords,
+  resolvePredictionRecord,
   listWeatherRecords,
 } from "../lib/store.js";
 import { fetchWeather } from "../lib/weatherService.js";
@@ -53,6 +54,13 @@ const feedbackBodySchema = z.object({
   question: z.enum(["rain", "cloudy", "wind"]),
   answer: z.enum(["yes", "no", "almost"]),
   locationName: z.string().optional(),
+});
+
+const autoResolveFeedbackSchema = z.object({
+  lat: z.coerce.number(),
+  lon: z.coerce.number(),
+  locationName: z.string().optional(),
+  targetTime: z.string().datetime().optional(),
 });
 
 function getSeason(month: number): "long-rains" | "short-rains" | "off-season" {
@@ -91,6 +99,18 @@ function getNearbyRecords<T extends { latitude: number; longitude: number }>(
 
 function clampProbability(value: number): number {
   return Math.min(0.98, Math.max(0.02, value));
+}
+
+function inferObservedRainAnswer(weathercode: number, humidity: number): "yes" | "no" | "almost" {
+  if (RAIN_CODES.has(weathercode)) {
+    return "yes";
+  }
+
+  if (humidity >= 84 || weathercode <= 3 || weathercode === 45 || weathercode === 48) {
+    return "almost";
+  }
+
+  return "no";
 }
 
 function weightedAverage(values: Array<{ value: number; weight: number }>): number | null {
@@ -687,6 +707,58 @@ router.post("/feedback", async (req, res): Promise<void> => {
   } catch (error) {
     req.log?.error({ err: error }, "Failed to store feedback");
     res.status(500).json({ error: "Failed to store feedback." });
+  }
+});
+
+router.post("/feedback/auto-resolve", async (req, res): Promise<void> => {
+  const parsed = autoResolveFeedbackSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  try {
+    const actor = getAuthenticatedActorFromRequest(req);
+    const weather = await fetchWeather(parsed.data.lat, parsed.data.lon);
+    const observedAnswer = inferObservedRainAnswer(weather.weathercode, weather.humidity);
+    const resolvedPrediction = await resolvePredictionRecord({
+      latitude: parsed.data.lat,
+      longitude: parsed.data.lon,
+      actualValue: observedAnswer === "yes" ? "yes" : "no",
+      targetTime: parsed.data.targetTime ? new Date(parsed.data.targetTime) : null,
+    });
+
+    if (resolvedPrediction) {
+      await addFeedbackRecord({
+        farmerId: actor.role === "farmer" ? actor.farmerSession.id : null,
+        latitude: parsed.data.lat,
+        longitude: parsed.data.lon,
+        question: "rain",
+        answer: observedAnswer,
+        locationName: parsed.data.locationName ?? null,
+      });
+    }
+
+    res.json({
+      success: true,
+      automatic: true,
+      resolved: Boolean(resolvedPrediction),
+      observedAnswer,
+      observedRain: observedAnswer === "yes",
+      matchedPrediction: resolvedPrediction?.isCorrect ?? null,
+      verifiedAt: weather.time,
+      weather: {
+        humidity: weather.humidity,
+        pressure: weather.pressure,
+        temperature: weather.temperature,
+        weathercode: weather.weathercode,
+        windspeed: weather.windspeed,
+      },
+      mlMode: ML_MODE,
+    });
+  } catch (error) {
+    req.log?.error({ err: error }, "Failed to auto-resolve feedback");
+    res.status(500).json({ error: "Failed to auto-resolve feedback." });
   }
 });
 

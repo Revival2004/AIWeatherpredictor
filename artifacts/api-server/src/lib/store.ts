@@ -874,6 +874,102 @@ export async function listPredictionRecords(): Promise<StoredPredictionRecord[]>
   return result.rows.map((row: DbRow) => mapPredictionRow(row));
 }
 
+export async function resolvePredictionRecord(input: {
+  latitude: number;
+  longitude: number;
+  actualValue: "yes" | "no";
+  targetTime?: Date | null;
+}): Promise<StoredPredictionRecord | null> {
+  const radiusDegrees = 0.02;
+
+  if (STORE_MODE === "memory") {
+    const targetTimeMs = input.targetTime?.getTime() ?? null;
+    const candidate = [...state.predictions]
+      .filter((prediction) => {
+        if (prediction.isCorrect !== null) {
+          return false;
+        }
+
+        if (Math.abs(prediction.latitude - input.latitude) > radiusDegrees) {
+          return false;
+        }
+
+        if (Math.abs(prediction.longitude - input.longitude) > radiusDegrees) {
+          return false;
+        }
+
+        if (targetTimeMs === null) {
+          return true;
+        }
+
+        return Math.abs(prediction.targetTime.getTime() - targetTimeMs) <= 4 * 60 * 60 * 1000;
+      })
+      .sort((a, b) => {
+        if (targetTimeMs !== null) {
+          return Math.abs(a.targetTime.getTime() - targetTimeMs) - Math.abs(b.targetTime.getTime() - targetTimeMs);
+        }
+
+        return b.targetTime.getTime() - a.targetTime.getTime();
+      })[0];
+
+    if (!candidate) {
+      return null;
+    }
+
+    candidate.isCorrect = candidate.predictionValue === input.actualValue;
+    return { ...candidate };
+  }
+
+  if (input.targetTime) {
+    const result = await getPool().query(
+      `
+        WITH candidate AS (
+          SELECT id
+          FROM weather_predictions
+          WHERE is_correct IS NULL
+            AND latitude BETWEEN $1 - $2 AND $1 + $2
+            AND longitude BETWEEN $3 - $2 AND $3 + $2
+            AND ABS(EXTRACT(EPOCH FROM (target_time - $4::timestamptz))) <= 14400
+          ORDER BY ABS(EXTRACT(EPOCH FROM (target_time - $4::timestamptz))) ASC, predicted_at DESC
+          LIMIT 1
+        )
+          UPDATE weather_predictions
+          SET actual_value = $5,
+            is_correct = (prediction_value = $5),
+            feedback_at = NOW()
+          WHERE id IN (SELECT id FROM candidate)
+          RETURNING *;
+      `,
+      [input.latitude, radiusDegrees, input.longitude, input.targetTime.toISOString(), input.actualValue],
+    );
+
+    return result.rowCount ? mapPredictionRow(result.rows[0] as DbRow) : null;
+  }
+
+  const result = await getPool().query(
+    `
+      WITH candidate AS (
+        SELECT id
+        FROM weather_predictions
+        WHERE is_correct IS NULL
+          AND latitude BETWEEN $1 - $2 AND $1 + $2
+          AND longitude BETWEEN $3 - $2 AND $3 + $2
+        ORDER BY target_time DESC, predicted_at DESC
+        LIMIT 1
+      )
+        UPDATE weather_predictions
+        SET actual_value = $4,
+          is_correct = (prediction_value = $4),
+          feedback_at = NOW()
+        WHERE id IN (SELECT id FROM candidate)
+        RETURNING *;
+    `,
+    [input.latitude, radiusDegrees, input.longitude, input.actualValue],
+  );
+
+  return result.rowCount ? mapPredictionRow(result.rows[0] as DbRow) : null;
+}
+
 export async function addFeedbackRecord(
   input: Omit<FarmerFeedbackRecord, "id" | "createdAt"> & { farmerId?: number | null },
 ): Promise<FarmerFeedbackRecord> {
