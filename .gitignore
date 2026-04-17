@@ -59,3 +59,8 @@ microclimate-source.zip
 artifacts/ml_model.json
 artifacts/ml_model_meta.json
 python/models/
+
+# Generated Expo web export artifacts
+artifacts/weather-mobile/static-build/
+artifacts/weather-mobile/web-build/
+artifacts/weather-mobile/.expo/
